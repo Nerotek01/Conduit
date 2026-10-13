@@ -1,0 +1,8 @@
+node_modules/
+dashboard/dist/
+dist/
+*.log
+.env
+coverage.out
+# Local-only: integration tests run against real infra and are never pushed.
+*_test.go

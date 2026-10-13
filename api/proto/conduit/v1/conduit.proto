@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package conduit.v1;
+
+option go_package = "github.com/Nerotek01/Conduit/pkg/api/conduit/v1;conduitv1";
+
+message Job {
+  string id = 1;
+  string type = 2;
+  string payload_json = 3;
+  string status = 4;
+  int32 priority = 5;
+  int32 attempts = 6;
+  int32 max_retries = 7;
+  string idempotency_key = 8;
+  string scheduled_at = 9;
+  string started_at = 10;
+  string finished_at = 11;
+  string last_error = 12;
+  string worker_id = 13;
+  string result_json = 14;
+  string run_id = 15;
+  string node_id = 16;
+  string created_at = 17;
+}
+
+message SubmitJobRequest {
+  string type = 1;
+  string payload_json = 2;
+  int32 priority = 3;
+  int32 max_retries = 4;
+  string idempotency_key = 5;
+  int64 delay_ms = 6;
+  int64 timeout_ms = 7;
+}
+
+message SubmitJobResponse {
+  Job job = 1;
+  bool duplicate = 2;
+}
+
+message GetJobRequest {
+  string id = 1;
+}
+
+message ListJobsRequest {
+  string status = 1;
+  string type = 2;
+  int32 limit = 3;
+}
+
+message ListJobsResponse {
+  repeated Job jobs = 1;
+}
+
+message CancelJobRequest {
+  string id = 1;
+}
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  string status = 1;
+}
+
+service JobService {
+  rpc SubmitJob(SubmitJobRequest) returns (SubmitJobResponse);
+  rpc GetJob(GetJobRequest) returns (Job);
+  rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
+  rpc CancelJob(CancelJobRequest) returns (Job);
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
