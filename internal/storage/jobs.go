@@ -291,6 +291,33 @@ RETURNING `+jobColumns, id)
         return job, nil
 }
 
+// RequeueJob puts a terminal dead or cancelled job back on the queue with a
+// fresh retry budget. The CAS guard (status IN dead/cancelled) makes it safe
+// to call concurrently and rejects any non-requeueable job with
+// ErrStatusConflict (surfaced as HTTP 409 by the API layer).
+func (s *Store) RequeueJob(ctx context.Context, id string) (*model.Job, error) {
+        if err := validUUID(id); err != nil {
+                return nil, err
+        }
+        row := s.pool.QueryRow(ctx, `
+UPDATE jobs SET status = 'queued', attempts = 0, last_error = NULL, worker_id = NULL,
+        started_at = NULL, finished_at = NULL, scheduled_at = NULL, updated_at = now()
+WHERE id = $1 AND status IN ('dead','cancelled')
+RETURNING `+jobColumns, id)
+        job, err := scanJob(row)
+        if err != nil {
+                if errors.Is(err, pgx.ErrNoRows) {
+                        current, getErr := s.GetJob(ctx, id)
+                        if getErr != nil {
+                                return nil, getErr
+                        }
+                        return current, fmt.Errorf("%w: job %s in status %s", ErrStatusConflict, id, current.Status)
+                }
+                return nil, fmt.Errorf("requeue job: %w", err)
+        }
+        return job, nil
+}
+
 func (s *Store) ClaimDueJobs(ctx context.Context, now time.Time, limit int) ([]model.Job, error) {
         if limit < 1 || limit > 1000 {
                 limit = 500

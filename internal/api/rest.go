@@ -132,6 +132,16 @@ func (s *Service) handleCancelJob(w http.ResponseWriter, r *http.Request) {
         writeJSON(w, http.StatusOK, map[string]any{"job": job})
 }
 
+func (s *Service) handleRequeueJob(w http.ResponseWriter, r *http.Request) {
+        id := r.PathValue("id")
+        job, err := s.RequeueJob(r.Context(), id)
+        if err != nil {
+                s.writeServiceError(w, err)
+                return
+        }
+        writeJSON(w, http.StatusOK, map[string]any{"job": job})
+}
+
 func (s *Service) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
         var def model.WorkflowDefinition
         if !readBody(w, r, 2<<20, &def) {

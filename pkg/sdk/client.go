@@ -151,6 +151,18 @@ func (c *Client) CancelJob(ctx context.Context, id string) (*model.Job, error) {
         return res.Job, nil
 }
 
+// RequeueJob returns a dead or cancelled job to the queue with a fresh retry
+// budget. Requeueing any other status returns ErrConflict.
+func (c *Client) RequeueJob(ctx context.Context, id string) (*model.Job, error) {
+        var res struct {
+                Job *model.Job `json:"job"`
+        }
+        if err := c.do(ctx, http.MethodPost, "/v1/jobs/"+url.PathEscape(id)+"/requeue", nil, &res); err != nil {
+                return nil, err
+        }
+        return res.Job, nil
+}
+
 type ListFilter struct {
         Status string
         Type   string

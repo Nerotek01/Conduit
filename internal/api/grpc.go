@@ -86,6 +86,14 @@ func (g *GRPCServer) CancelJob(ctx context.Context, req *conduitv1.CancelJobRequ
         return toProtoJob(job), nil
 }
 
+func (g *GRPCServer) RequeueJob(ctx context.Context, req *conduitv1.RequeueJobRequest) (*conduitv1.Job, error) {
+        job, err := g.svc.RequeueJob(ctx, req.GetId())
+        if err != nil {
+                return nil, mapError(err)
+        }
+        return toProtoJob(job), nil
+}
+
 func (g *GRPCServer) HealthCheck(ctx context.Context, _ *conduitv1.HealthCheckRequest) (*conduitv1.HealthCheckResponse, error) {
         if err := g.svc.Healthy(ctx); err != nil {
                 return &conduitv1.HealthCheckResponse{Status: "unhealthy"}, nil

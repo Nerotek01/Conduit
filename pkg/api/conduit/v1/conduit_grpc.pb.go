@@ -23,6 +23,7 @@ const (
 	JobService_GetJob_FullMethodName      = "/conduit.v1.JobService/GetJob"
 	JobService_ListJobs_FullMethodName    = "/conduit.v1.JobService/ListJobs"
 	JobService_CancelJob_FullMethodName   = "/conduit.v1.JobService/CancelJob"
+	JobService_RequeueJob_FullMethodName  = "/conduit.v1.JobService/RequeueJob"
 	JobService_HealthCheck_FullMethodName = "/conduit.v1.JobService/HealthCheck"
 )
 
@@ -34,6 +35,7 @@ type JobServiceClient interface {
 	GetJob(ctx context.Context, in *GetJobRequest, opts ...grpc.CallOption) (*Job, error)
 	ListJobs(ctx context.Context, in *ListJobsRequest, opts ...grpc.CallOption) (*ListJobsResponse, error)
 	CancelJob(ctx context.Context, in *CancelJobRequest, opts ...grpc.CallOption) (*Job, error)
+	RequeueJob(ctx context.Context, in *RequeueJobRequest, opts ...grpc.CallOption) (*Job, error)
 	HealthCheck(ctx context.Context, in *HealthCheckRequest, opts ...grpc.CallOption) (*HealthCheckResponse, error)
 }
 
@@ -85,6 +87,16 @@ func (c *jobServiceClient) CancelJob(ctx context.Context, in *CancelJobRequest, 
 	return out, nil
 }
 
+func (c *jobServiceClient) RequeueJob(ctx context.Context, in *RequeueJobRequest, opts ...grpc.CallOption) (*Job, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Job)
+	err := c.cc.Invoke(ctx, JobService_RequeueJob_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *jobServiceClient) HealthCheck(ctx context.Context, in *HealthCheckRequest, opts ...grpc.CallOption) (*HealthCheckResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(HealthCheckResponse)
@@ -103,6 +115,7 @@ type JobServiceServer interface {
 	GetJob(context.Context, *GetJobRequest) (*Job, error)
 	ListJobs(context.Context, *ListJobsRequest) (*ListJobsResponse, error)
 	CancelJob(context.Context, *CancelJobRequest) (*Job, error)
+	RequeueJob(context.Context, *RequeueJobRequest) (*Job, error)
 	HealthCheck(context.Context, *HealthCheckRequest) (*HealthCheckResponse, error)
 	mustEmbedUnimplementedJobServiceServer()
 }
@@ -125,6 +138,9 @@ func (UnimplementedJobServiceServer) ListJobs(context.Context, *ListJobsRequest)
 }
 func (UnimplementedJobServiceServer) CancelJob(context.Context, *CancelJobRequest) (*Job, error) {
 	return nil, status.Error(codes.Unimplemented, "method CancelJob not implemented")
+}
+func (UnimplementedJobServiceServer) RequeueJob(context.Context, *RequeueJobRequest) (*Job, error) {
+	return nil, status.Error(codes.Unimplemented, "method RequeueJob not implemented")
 }
 func (UnimplementedJobServiceServer) HealthCheck(context.Context, *HealthCheckRequest) (*HealthCheckResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method HealthCheck not implemented")
@@ -222,6 +238,24 @@ func _JobService_CancelJob_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _JobService_RequeueJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RequeueJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(JobServiceServer).RequeueJob(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: JobService_RequeueJob_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(JobServiceServer).RequeueJob(ctx, req.(*RequeueJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _JobService_HealthCheck_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(HealthCheckRequest)
 	if err := dec(in); err != nil {
@@ -262,6 +296,10 @@ var JobService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CancelJob",
 			Handler:    _JobService_CancelJob_Handler,
+		},
+		{
+			MethodName: "RequeueJob",
+			Handler:    _JobService_RequeueJob_Handler,
 		},
 		{
 			MethodName: "HealthCheck",

@@ -36,6 +36,12 @@ export default function JobDetail({ job, onClose, tick }) {
       .catch(() => {})
   }, [current.id])
 
+  const requeue = useCallback(() => {
+    fetchJSON(`/v1/jobs/${current.id}/requeue`, { method: 'POST' })
+      .then((res) => setCurrent(res.job))
+      .catch(() => {})
+  }, [current.id])
+
   const rows = [
     ['id', current.id],
     ['type', current.type],
@@ -60,6 +66,11 @@ export default function JobDetail({ job, onClose, tick }) {
           {['queued', 'scheduled', 'retrying'].includes(current.status) && (
             <button className="btn danger" onClick={cancel}>
               cancel
+            </button>
+          )}
+          {['dead', 'cancelled'].includes(current.status) && (
+            <button className="btn" onClick={requeue}>
+              requeue
             </button>
           )}
           <button className="btn" onClick={onClose}>

@@ -268,10 +268,37 @@ func (s *Service) ListWorkers(ctx context.Context) ([]model.WorkerInfo, error) {
         return s.store.ListWorkers(ctx)
 }
 
+// RequeueJob returns a dead or cancelled job to the queue with a fresh
+// retry budget. The Redis message is added after the row flips to queued, so
+// the coordinator's stale-queued sweep can heal a crash between the two steps.
+func (s *Service) RequeueJob(ctx context.Context, id string) (*model.Job, error) {
+        job, err := s.store.RequeueJob(ctx, id)
+        if err != nil {
+                return nil, err
+        }
+        if job.Status == model.StatusQueued {
+                if err := s.q.Enqueue(ctx, job.ID, job.Priority); err != nil {
+                        return nil, fmt.Errorf("enqueue: %w", err)
+                }
+                s.met.JobsRequeued.Inc()
+                s.bus.Publish(events.Event{Kind: events.JobSubmitted, Job: job})
+        }
+        return job, nil
+}
+
 func (s *Service) CreateSchedule(ctx context.Context, in model.Schedule, next time.Time) (*model.Schedule, error) {
         in.NextRun = &next
         if !model.JobTypePattern.MatchString(in.JobType) {
                 return nil, invalid(fmt.Errorf("invalid job type %q", in.JobType))
+        }
+        // Mirror SubmitInput.Validate: reject out-of-range values with a clean
+        // 400 instead of letting the DB CHECK constraint surface as an opaque
+        // 500 (and a spurious ERROR log line) at insert time.
+        if in.Priority != 0 && (in.Priority < model.MinPriority || in.Priority > model.MaxPriority) {
+                return nil, invalid(fmt.Errorf("priority must be between %d and %d", model.MinPriority, model.MaxPriority))
+        }
+        if in.MaxRetries < 0 || in.MaxRetries > model.MaxMaxRetries {
+                return nil, invalid(fmt.Errorf("max_retries must be between 0 and %d", model.MaxMaxRetries))
         }
         return s.store.CreateSchedule(ctx, in)
 }

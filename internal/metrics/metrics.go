@@ -16,6 +16,7 @@ type Metrics struct {
         JobsRetried    prometheus.Counter
         JobsDead       prometheus.Counter
         JobsCancelled  prometheus.Counter
+        JobsRequeued   prometheus.Counter
         JobDuration    prometheus.Histogram
         SubmitLatency  prometheus.Histogram
         QueueDepth     *prometheus.GaugeVec
@@ -48,6 +49,11 @@ func New() *Metrics {
                 JobsCancelled: factory.NewCounter(prometheus.CounterOpts{
                         Namespace: "conduit",
                         Name:      "jobs_cancelled_total",
+                }),
+                JobsRequeued: factory.NewCounter(prometheus.CounterOpts{
+                        Namespace: "conduit",
+                        Name:      "jobs_requeued_total",
+                        Help:      "Dead or cancelled jobs put back on the queue via the requeue API",
                 }),
                 JobDuration: factory.NewHistogram(prometheus.HistogramOpts{
                         Namespace: "conduit",

@@ -57,6 +57,10 @@ message CancelJobRequest {
   string id = 1;
 }
 
+message RequeueJobRequest {
+  string id = 1;
+}
+
 message HealthCheckRequest {}
 
 message HealthCheckResponse {
@@ -68,5 +72,6 @@ service JobService {
   rpc GetJob(GetJobRequest) returns (Job);
   rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
   rpc CancelJob(CancelJobRequest) returns (Job);
+  rpc RequeueJob(RequeueJobRequest) returns (Job);
   rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
 }

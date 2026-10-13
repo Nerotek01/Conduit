@@ -73,6 +73,14 @@ func (s *Store) CreateSchedule(ctx context.Context, sch model.Schedule) (*model.
         if priority == 0 {
                 priority = model.PriorityNormal
         }
+        // Defense-in-depth: keep non-API callers (tests, future CLI tools) from
+        // hitting the DB CHECK constraint with an opaque pg error.
+        if priority < model.MinPriority || priority > model.MaxPriority {
+                return nil, fmt.Errorf("priority must be between %d and %d", model.MinPriority, model.MaxPriority)
+        }
+        if sch.MaxRetries < 0 || sch.MaxRetries > model.MaxMaxRetries {
+                return nil, fmt.Errorf("max_retries must be between 0 and %d", model.MaxMaxRetries)
+        }
         if _, err := time.LoadLocation(tz); err != nil {
                 return nil, fmt.Errorf("unknown timezone %q", tz)
         }

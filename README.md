@@ -23,6 +23,7 @@ Conduit runs on **PostgreSQL** for durable state and **Redis Streams** for dispa
 
 - **At-least-once execution** with idempotency keys, status CAS on every transition, and `SKIP LOCKED` claim queries — no double-claim races.
 - **Retries with exponential backoff + jitter**, permanent-error short-circuit, panic recovery (poison pills die immediately), and a dead-letter stream with reasons.
+- **Requeue API for dead and cancelled jobs** (`POST /v1/jobs/{id}/requeue`): a terminal job goes back on the queue with a fresh retry budget — attempts reset, error/worker fields cleared — so operators can replay a failed job without resubmitting it under a new idempotency key. Exposed over REST, gRPC, and the Go SDK, with a one-click **requeue** button in the dashboard.
 - **Per-job execution timeout** (`timeout_ms`, 1s–24h) plus a server-wide default; timed-out jobs fail with `context deadline exceeded` and follow the normal retry path.
 - **DAG workflows**: conditional branches (`on_success` / `on_failure`), compensation handlers (`on_failure` nodes), idempotent node submission, optimistic versioning (CAS) with automatic conflict retry, and failure isolation — a failed run cancels its still-queued node jobs while late-finished running nodes record their real outcome.
 - **Priority queues** (1=high … 4=bulk) as four Redis Streams read in one `XREADGROUP`.
@@ -126,6 +127,9 @@ GET    /v1/jobs?status=&type=&limit=
                                       share a timestamp
 GET    /v1/jobs/{id}                  job detail
 DELETE /v1/jobs/{id}                  cancel (queued/scheduled/retrying only)
+POST   /v1/jobs/{id}/requeue          requeue a dead/cancelled job back onto
+                                      the queue with a fresh retry budget
+                                      (attempts reset; 409 on other statuses)
 POST   /v1/workflows                  create DAG definition (nodes may be
                                       declared in any order)
 GET    /v1/workflows                  list definitions

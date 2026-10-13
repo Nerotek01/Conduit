@@ -42,6 +42,7 @@ func NewServer(svc *Service, opts ServerOptions, met interface {
         mux.Handle("GET /v1/jobs", timed(svc.handleListJobs))
         mux.Handle("GET /v1/jobs/{id}", timed(svc.handleGetJob))
         mux.Handle("DELETE /v1/jobs/{id}", timed(svc.handleCancelJob))
+        mux.Handle("POST /v1/jobs/{id}/requeue", timed(svc.handleRequeueJob))
         mux.Handle("POST /v1/workflows", timed(svc.handleCreateWorkflow))
         mux.Handle("GET /v1/workflows", timed(svc.handleListWorkflows))
         mux.Handle("GET /v1/workflows/{id}", timed(svc.handleGetWorkflow))

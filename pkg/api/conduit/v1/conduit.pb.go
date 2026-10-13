@@ -529,6 +529,50 @@ func (x *CancelJobRequest) GetId() string {
 	return ""
 }
 
+type RequeueJobRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RequeueJobRequest) Reset() {
+	*x = RequeueJobRequest{}
+	mi := &file_conduit_v1_conduit_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RequeueJobRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequeueJobRequest) ProtoMessage() {}
+
+func (x *RequeueJobRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_conduit_v1_conduit_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequeueJobRequest.ProtoReflect.Descriptor instead.
+func (*RequeueJobRequest) Descriptor() ([]byte, []int) {
+	return file_conduit_v1_conduit_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *RequeueJobRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
 type HealthCheckRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -537,7 +581,7 @@ type HealthCheckRequest struct {
 
 func (x *HealthCheckRequest) Reset() {
 	*x = HealthCheckRequest{}
-	mi := &file_conduit_v1_conduit_proto_msgTypes[7]
+	mi := &file_conduit_v1_conduit_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -549,7 +593,7 @@ func (x *HealthCheckRequest) String() string {
 func (*HealthCheckRequest) ProtoMessage() {}
 
 func (x *HealthCheckRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_conduit_v1_conduit_proto_msgTypes[7]
+	mi := &file_conduit_v1_conduit_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -562,7 +606,7 @@ func (x *HealthCheckRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthCheckRequest.ProtoReflect.Descriptor instead.
 func (*HealthCheckRequest) Descriptor() ([]byte, []int) {
-	return file_conduit_v1_conduit_proto_rawDescGZIP(), []int{7}
+	return file_conduit_v1_conduit_proto_rawDescGZIP(), []int{8}
 }
 
 type HealthCheckResponse struct {
@@ -574,7 +618,7 @@ type HealthCheckResponse struct {
 
 func (x *HealthCheckResponse) Reset() {
 	*x = HealthCheckResponse{}
-	mi := &file_conduit_v1_conduit_proto_msgTypes[8]
+	mi := &file_conduit_v1_conduit_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -586,7 +630,7 @@ func (x *HealthCheckResponse) String() string {
 func (*HealthCheckResponse) ProtoMessage() {}
 
 func (x *HealthCheckResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_conduit_v1_conduit_proto_msgTypes[8]
+	mi := &file_conduit_v1_conduit_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -599,7 +643,7 @@ func (x *HealthCheckResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthCheckResponse.ProtoReflect.Descriptor instead.
 func (*HealthCheckResponse) Descriptor() ([]byte, []int) {
-	return file_conduit_v1_conduit_proto_rawDescGZIP(), []int{8}
+	return file_conduit_v1_conduit_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *HealthCheckResponse) GetStatus() string {
@@ -662,16 +706,20 @@ const file_conduit_v1_conduit_proto_rawDesc = "" +
 	"\x10ListJobsResponse\x12#\n" +
 	"\x04jobs\x18\x01 \x03(\v2\x0f.conduit.v1.JobR\x04jobs\"\"\n" +
 	"\x10CancelJobRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"#\n" +
+	"\x11RequeueJobRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x14\n" +
 	"\x12HealthCheckRequest\"-\n" +
 	"\x13HealthCheckResponse\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\tR\x06status2\xdf\x02\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status2\x9d\x03\n" +
 	"\n" +
 	"JobService\x12H\n" +
 	"\tSubmitJob\x12\x1c.conduit.v1.SubmitJobRequest\x1a\x1d.conduit.v1.SubmitJobResponse\x124\n" +
 	"\x06GetJob\x12\x19.conduit.v1.GetJobRequest\x1a\x0f.conduit.v1.Job\x12E\n" +
 	"\bListJobs\x12\x1b.conduit.v1.ListJobsRequest\x1a\x1c.conduit.v1.ListJobsResponse\x12:\n" +
-	"\tCancelJob\x12\x1c.conduit.v1.CancelJobRequest\x1a\x0f.conduit.v1.Job\x12N\n" +
+	"\tCancelJob\x12\x1c.conduit.v1.CancelJobRequest\x1a\x0f.conduit.v1.Job\x12<\n" +
+	"\n" +
+	"RequeueJob\x12\x1d.conduit.v1.RequeueJobRequest\x1a\x0f.conduit.v1.Job\x12N\n" +
 	"\vHealthCheck\x12\x1e.conduit.v1.HealthCheckRequest\x1a\x1f.conduit.v1.HealthCheckResponseB;Z9github.com/Nerotek01/Conduit/pkg/api/conduit/v1;conduitv1b\x06proto3"
 
 var (
@@ -686,7 +734,7 @@ func file_conduit_v1_conduit_proto_rawDescGZIP() []byte {
 	return file_conduit_v1_conduit_proto_rawDescData
 }
 
-var file_conduit_v1_conduit_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_conduit_v1_conduit_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_conduit_v1_conduit_proto_goTypes = []any{
 	(*Job)(nil),                 // 0: conduit.v1.Job
 	(*SubmitJobRequest)(nil),    // 1: conduit.v1.SubmitJobRequest
@@ -695,8 +743,9 @@ var file_conduit_v1_conduit_proto_goTypes = []any{
 	(*ListJobsRequest)(nil),     // 4: conduit.v1.ListJobsRequest
 	(*ListJobsResponse)(nil),    // 5: conduit.v1.ListJobsResponse
 	(*CancelJobRequest)(nil),    // 6: conduit.v1.CancelJobRequest
-	(*HealthCheckRequest)(nil),  // 7: conduit.v1.HealthCheckRequest
-	(*HealthCheckResponse)(nil), // 8: conduit.v1.HealthCheckResponse
+	(*RequeueJobRequest)(nil),   // 7: conduit.v1.RequeueJobRequest
+	(*HealthCheckRequest)(nil),  // 8: conduit.v1.HealthCheckRequest
+	(*HealthCheckResponse)(nil), // 9: conduit.v1.HealthCheckResponse
 }
 var file_conduit_v1_conduit_proto_depIdxs = []int32{
 	0, // 0: conduit.v1.SubmitJobResponse.job:type_name -> conduit.v1.Job
@@ -705,14 +754,16 @@ var file_conduit_v1_conduit_proto_depIdxs = []int32{
 	3, // 3: conduit.v1.JobService.GetJob:input_type -> conduit.v1.GetJobRequest
 	4, // 4: conduit.v1.JobService.ListJobs:input_type -> conduit.v1.ListJobsRequest
 	6, // 5: conduit.v1.JobService.CancelJob:input_type -> conduit.v1.CancelJobRequest
-	7, // 6: conduit.v1.JobService.HealthCheck:input_type -> conduit.v1.HealthCheckRequest
-	2, // 7: conduit.v1.JobService.SubmitJob:output_type -> conduit.v1.SubmitJobResponse
-	0, // 8: conduit.v1.JobService.GetJob:output_type -> conduit.v1.Job
-	5, // 9: conduit.v1.JobService.ListJobs:output_type -> conduit.v1.ListJobsResponse
-	0, // 10: conduit.v1.JobService.CancelJob:output_type -> conduit.v1.Job
-	8, // 11: conduit.v1.JobService.HealthCheck:output_type -> conduit.v1.HealthCheckResponse
-	7, // [7:12] is the sub-list for method output_type
-	2, // [2:7] is the sub-list for method input_type
+	7, // 6: conduit.v1.JobService.RequeueJob:input_type -> conduit.v1.RequeueJobRequest
+	8, // 7: conduit.v1.JobService.HealthCheck:input_type -> conduit.v1.HealthCheckRequest
+	2, // 8: conduit.v1.JobService.SubmitJob:output_type -> conduit.v1.SubmitJobResponse
+	0, // 9: conduit.v1.JobService.GetJob:output_type -> conduit.v1.Job
+	5, // 10: conduit.v1.JobService.ListJobs:output_type -> conduit.v1.ListJobsResponse
+	0, // 11: conduit.v1.JobService.CancelJob:output_type -> conduit.v1.Job
+	0, // 12: conduit.v1.JobService.RequeueJob:output_type -> conduit.v1.Job
+	9, // 13: conduit.v1.JobService.HealthCheck:output_type -> conduit.v1.HealthCheckResponse
+	8, // [8:14] is the sub-list for method output_type
+	2, // [2:8] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name
 	2, // [2:2] is the sub-list for extension extendee
 	0, // [0:2] is the sub-list for field type_name
@@ -729,7 +780,7 @@ func file_conduit_v1_conduit_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_conduit_v1_conduit_proto_rawDesc), len(file_conduit_v1_conduit_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
