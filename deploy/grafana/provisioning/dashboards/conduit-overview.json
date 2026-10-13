@@ -1,0 +1,117 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS}" },
+          "expr": "sum(rate(conduit_jobs_submitted_total[1m]))",
+          "legendFormat": "submitted/s"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS}" },
+          "expr": "sum(rate(conduit_jobs_succeeded_total[1m]))",
+          "legendFormat": "succeeded/s"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS}" },
+          "expr": "sum(rate(conduit_jobs_retried_total[1m]))",
+          "legendFormat": "retried/s"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS}" },
+          "expr": "sum(rate(conduit_jobs_dead_total[1m]))",
+          "legendFormat": "dead/s"
+        }
+      ],
+      "title": "Job throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "id": 2,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS}" },
+          "expr": "histogram_quantile(0.99, sum(rate(conduit_job_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "job p99"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS}" },
+          "expr": "histogram_quantile(0.99, sum(rate(conduit_submit_latency_seconds_bucket[5m])) by (le))",
+          "legendFormat": "submit p99"
+        }
+      ],
+      "title": "Latency p99",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "id": 3,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS}" },
+          "expr": "conduit_queue_depth",
+          "legendFormat": "{{stream}}"
+        }
+      ],
+      "title": "Queue depth per stream",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 8 },
+      "id": 4,
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS}" },
+          "expr": "conduit_active_workers",
+          "legendFormat": "active workers"
+        }
+      ],
+      "title": "Active workers",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 8 },
+      "id": 5,
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS}" },
+          "expr": "conduit_in_flight_jobs",
+          "legendFormat": "in flight"
+        }
+      ],
+      "title": "In-flight jobs",
+      "type": "stat"
+    }
+  ],
+  "schemaVersion": 39,
+  "templating": {
+    "list": [
+      {
+        "name": "DS",
+        "type": "datasource",
+        "query": "prometheus"
+      }
+    ]
+  },
+  "time": { "from": "now-30m", "to": "now" },
+  "title": "Conduit overview",
+  "uid": "conduit-overview",
+  "version": 1
+}
