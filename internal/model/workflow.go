@@ -90,6 +90,10 @@ type Schedule struct {
         NextRun    *time.Time      `json:"next_run,omitempty"`
         Active     bool            `json:"active"`
         CreatedAt  time.Time       `json:"created_at"`
+        // DueAt carries the pre-claim next_run returned by ClaimDueSchedules.
+        // It identifies the exact occurrence being fired so the idempotency
+        // key of the spawned job is deterministic across retries and crashes.
+        DueAt time.Time `json:"-"`
 }
 
 type WorkerInfo struct {
@@ -116,6 +120,10 @@ func (d *WorkflowDefinition) Validate() error {
         if len(d.Nodes) == 0 || len(d.Nodes) > 256 {
                 return fmt.Errorf("workflow must contain 1-256 nodes")
         }
+        // Pass 1: collect every node id first so dependency and condition
+        // references may point at nodes declared later in the definition.
+        // A single pass would reject valid DAGs whose nodes are listed out of
+        // topological order with a misleading "unknown node" error.
         seen := make(map[string]bool, len(d.Nodes))
         for _, n := range d.Nodes {
                 if n.ID == "" || len(n.ID) > 64 {
@@ -125,6 +133,8 @@ func (d *WorkflowDefinition) Validate() error {
                         return fmt.Errorf("duplicate node id %q", n.ID)
                 }
                 seen[n.ID] = true
+        }
+        for _, n := range d.Nodes {
                 if !JobTypePattern.MatchString(n.JobType) {
                         return fmt.Errorf("node %q has invalid job type %q", n.ID, n.JobType)
                 }

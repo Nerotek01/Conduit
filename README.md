@@ -97,10 +97,15 @@ REST (JSON) and gRPC (`conduit.v1.JobService`) expose the same operations; a Go 
 ```
 POST   /v1/jobs                     submit { type, payload, priority, max_retries,
                                       idempotency_key, delay_ms, timeout_ms }
-GET    /v1/jobs?status=&type=&limit=  cursor-paginated listing
+GET    /v1/jobs?status=&type=&limit=
+                                      cursor-paginated listing; responses carry
+                                      next_cursor + next_before_id - pass BOTH
+                                      back to page without skipping rows that
+                                      share a timestamp
 GET    /v1/jobs/{id}                  job detail
 DELETE /v1/jobs/{id}                  cancel (queued/scheduled/retrying only)
-POST   /v1/workflows                  create DAG definition
+POST   /v1/workflows                  create DAG definition (nodes may be
+                                      declared in any order)
 GET    /v1/workflows                  list definitions
 GET    /v1/workflows/{id}             definition detail
 POST   /v1/workflows/{id}/run         start a run
@@ -110,7 +115,9 @@ GET    /v1/schedules                  list schedules
 DELETE /v1/schedules/{id}             delete schedule
 GET    /v1/queues                     stream depths + pending + status counts
 GET    /v1/workers                    live workers
-GET    /v1/ws                         WebSocket event stream
+GET    /v1/ws                         WebSocket event stream (same-origin
+                                      browsers; SDKs/CLI without an Origin
+                                      header are always allowed)
 GET    /metrics                       Prometheus
 GET    /healthz                       liveness (checks PG + Redis)
 ```
@@ -139,7 +146,9 @@ POST /v1/workflows
 - **No lost updates**: every worker→PG status write is a guarded `UPDATE ... WHERE status = 'running'`; workflow runs use a `version` column with compare-and-swap plus in-engine retry.
 - **Exactly the workers you bring**: workers register via heartbeats; the coordinator marks them dead after 2× missed beats, XAUTOCLAIMs their pending messages after the visibility timeout, and requeues orphaned running jobs.
 - **Lease-bounded recovery**: stale-queued re-enqueue refreshes `updated_at`, so a backlogged job is re-enqueued at most once per stale window instead of every sweep.
-- **WS safety**: the WebSocket route is intentionally outside the request-timeout middleware (hijacked connections manage their own deadlines), and the middleware forwards `http.Hijacker`/`Flusher`.
+- **Crash-safe scheduling**: cron occurrences fire under a deterministic idempotency key (`sched:<id>:<due>`), and every scheduler tick heals schedules orphaned by a crash mid-fire - a schedule can skip at most the occurrence it was firing when it died, never stop entirely.
+- **Serial migrations**: all processes take a PostgreSQL advisory lock around auto-migration, so `docker compose up` can boot server, worker, and coordinator simultaneously without racing on `schema_migrations`.
+- **WS safety**: the WebSocket route is intentionally outside the request-timeout middleware (hijacked connections manage their own deadlines), the middleware forwards `http.Hijacker`/`Flusher`, and cross-origin browser upgrades are rejected (CSWSRF hardening; non-browser clients unaffected).
 
 ## Repository layout
 

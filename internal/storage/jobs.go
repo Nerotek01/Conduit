@@ -73,6 +73,13 @@ RETURNING `+jobColumns,
         if err != nil {
                 var pgErr *pgconn.PgError
                 if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+                        // A unique violation can only come from the partial
+                        // idempotency-key index, whose predicate requires a
+                        // non-NULL key; guard anyway so a future unique index
+                        // on another column cannot panic the process here.
+                        if in.IdempotencyKey == nil {
+                                return nil, false, fmt.Errorf("insert job: unique constraint %s: %w", pgErr.ConstraintName, ErrDuplicateKey)
+                        }
                         existing, getErr := s.GetJobByIdempotencyKey(ctx, *in.IdempotencyKey)
                         if getErr != nil {
                                 return nil, false, fmt.Errorf("duplicate key lookup: %w", getErr)
@@ -119,11 +126,12 @@ func (s *Store) GetJobByIdempotencyKey(ctx context.Context, key string) (*model.
 }
 
 type ListFilter struct {
-        Status *model.JobStatus
-        Type   string
-        RunID  *string
-        Cursor *time.Time
-        Limit  int
+        Status   *model.JobStatus
+        Type     string
+        RunID    *string
+        Cursor   *time.Time
+        BeforeID string
+        Limit    int
 }
 
 func (s *Store) ListJobs(ctx context.Context, f ListFilter) ([]model.Job, bool, error) {
@@ -150,7 +158,19 @@ func (s *Store) ListJobs(ctx context.Context, f ListFilter) ([]model.Job, bool, 
         }
         if f.Cursor != nil {
                 args = append(args, *f.Cursor)
-                q += fmt.Sprintf(" AND (created_at, id) < ($%d, '00000000-0000-0000-0000-000000000000')", len(args))
+                // Row-value comparison against (created_at, id): the id part
+                // MUST be the last row's id, not a hardcoded zero-uuid.
+                // Otherwise every row sharing the boundary row's created_at is
+                // excluded by the comparison and silently skipped - with
+                // batch submissions, many jobs share the same timestamp.
+                beforeID := f.BeforeID
+                if beforeID == "" {
+                        beforeID = "00000000-0000-0000-0000-000000000000"
+                } else if err := validUUID(beforeID); err != nil {
+                        return nil, false, err
+                }
+                args = append(args, beforeID)
+                q += fmt.Sprintf(" AND (created_at, id) < ($%d, $%d)", len(args)-1, len(args))
         }
         q += " ORDER BY created_at DESC, id DESC"
         args = append(args, limit+1)

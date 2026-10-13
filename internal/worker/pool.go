@@ -324,7 +324,9 @@ func (p *Pool) finishSucceeded(ctx context.Context, job *model.Job, result json.
         if p.hook != nil {
                 hookCtx, hookCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
                 defer hookCancel()
-                p.hook(hookCtx, updated)
+                if err := p.hook(hookCtx, updated); err != nil {
+                        p.logger.Error("terminal hook failed", "job_id", job.ID, "error", err)
+                }
         }
 }
 
@@ -355,6 +357,8 @@ func (p *Pool) finishDead(ctx context.Context, job *model.Job, cause string) {
         if p.hook != nil {
                 hookCtx, hookCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
                 defer hookCancel()
-                p.hook(hookCtx, updated)
+                if err := p.hook(hookCtx, updated); err != nil {
+                        p.logger.Error("terminal hook failed", "job_id", job.ID, "error", err)
+                }
         }
 }

@@ -2,7 +2,9 @@ package api
 
 import (
         "encoding/json"
+        "net"
         "net/http"
+        "net/url"
         "sync"
         "time"
 
@@ -112,6 +114,46 @@ func (h *Hub) disconnect(c *wsClient) {
 var upgrader = websocket.Upgrader{
         ReadBufferSize:  1024,
         WriteBufferSize: 4096,
+        // Reject cross-origin browser connections: without this check any web
+        // page visited by a dashboard user could open a WebSocket to Conduit
+        // (cross-site WebSocket hijacking) and stream live job events. Non-browser
+        // clients (SDKs, curl, proxies) send no Origin header and stay allowed.
+        CheckOrigin: checkOrigin,
+}
+
+func checkOrigin(r *http.Request) bool {
+        origin := r.Header.Get("Origin")
+        if origin == "" {
+                return true // non-browser client
+        }
+        u, err := url.Parse(origin)
+        if err != nil {
+                return false
+        }
+        host := u.Hostname()
+        if u.Port() != "" {
+                host = net.JoinHostPort(host, u.Port())
+        }
+        return equalFoldASCII(host, r.Host)
+}
+
+func equalFoldASCII(a, b string) bool {
+        if len(a) != len(b) {
+                return false
+        }
+        for i := 0; i < len(a); i++ {
+                ca, cb := a[i], b[i]
+                if 'A' <= ca && ca <= 'Z' {
+                        ca += 'a' - 'A'
+                }
+                if 'A' <= cb && cb <= 'Z' {
+                        cb += 'a' - 'A'
+                }
+                if ca != cb {
+                        return false
+                }
+        }
+        return true
 }
 
 func (h *Hub) HandleWS(w http.ResponseWriter, r *http.Request) {

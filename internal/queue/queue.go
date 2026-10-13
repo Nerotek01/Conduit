@@ -194,7 +194,7 @@ func (q *RedisQueue) Pending(ctx context.Context) (int64, error) {
         for _, stream := range q.streams {
                 n, err := q.client.XPending(ctx, stream, GroupName).Result()
                 if err != nil {
-                        if err.Error() == "NOGROUP no such key" {
+                        if strings.HasPrefix(err.Error(), "NOGROUP") {
                                 continue
                         }
                         return 0, fmt.Errorf("xpending %s: %w", stream, err)

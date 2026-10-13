@@ -8,6 +8,8 @@ import (
         "strconv"
         "time"
 
+        "github.com/google/uuid"
+
         "github.com/Nerotek01/Conduit/internal/model"
         "github.com/Nerotek01/Conduit/internal/storage"
 )
@@ -86,6 +88,7 @@ func (s *Service) handleListJobs(w http.ResponseWriter, r *http.Request) {
                 limit = n
         }
         var cursor *time.Time
+        beforeID := ""
         if v := q.Get("cursor"); v != "" {
                 t, err := time.Parse(time.RFC3339Nano, v)
                 if err != nil {
@@ -94,11 +97,23 @@ func (s *Service) handleListJobs(w http.ResponseWriter, r *http.Request) {
                 }
                 cursor = &t
         }
+        if v := q.Get("before_id"); v != "" {
+                if _, err := uuid.Parse(v); err != nil {
+                        writeError(w, http.StatusBadRequest, "invalid before_id")
+                        return
+                }
+                if cursor == nil {
+                        writeError(w, http.StatusBadRequest, "before_id requires cursor (pass both next_cursor and next_before_id from the previous response)")
+                        return
+                }
+                beforeID = v
+        }
         res, err := s.ListJobs(r.Context(), ListOptions{
-                Status: q.Get("status"),
-                Type:   q.Get("type"),
-                Limit:  limit,
-                Cursor: cursor,
+                Status:   q.Get("status"),
+                Type:     q.Get("type"),
+                Limit:    limit,
+                Cursor:   cursor,
+                BeforeID: beforeID,
         })
         if err != nil {
                 s.writeServiceError(w, err)

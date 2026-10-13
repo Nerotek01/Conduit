@@ -7,6 +7,7 @@ import (
         "time"
 
         "github.com/jackc/pgx/v5"
+        "github.com/robfig/cron/v3"
 
         "github.com/Nerotek01/Conduit/internal/model"
 )
@@ -87,6 +88,11 @@ func validCron(expr string) error {
         if len(expr) == 0 || len(expr) > 128 {
                 return fmt.Errorf("cron expression must be 1-128 characters")
         }
+        // Parse for real: a length-only check would let garbage through now that
+        // ClaimDueSchedules no longer hides bad rows behind a NULL next_run.
+        if _, err := cron.ParseStandard(expr); err != nil {
+                return fmt.Errorf("invalid cron expression: %w", err)
+        }
         return nil
 }
 
@@ -135,18 +141,53 @@ func (s *Store) ClaimDueSchedules(ctx context.Context, now time.Time, limit int)
         if limit < 1 || limit > 500 {
                 limit = 100
         }
+        // The claim marks rows as "firing" by nulling next_run, but returns the
+        // OLD next_run as DueAt via the CTE so the firing path can (a) build a
+        // deterministic idempotency key per occurrence and (b) not lose the due
+        // time it claimed. RETURNING alone cannot express the pre-update value.
         rows, err := s.pool.Query(ctx, `
-UPDATE schedules SET next_run = NULL
-WHERE id IN (
-    SELECT id FROM schedules
+WITH due AS (
+    SELECT id, next_run AS due_at
+    FROM schedules
     WHERE active AND next_run IS NOT NULL AND next_run <= $1
     ORDER BY next_run
     LIMIT $2
     FOR UPDATE SKIP LOCKED
 )
-RETURNING id, job_type, payload, cron_expr, timezone, priority, max_retries, next_run, active, created_at`, now, limit)
+UPDATE schedules SET next_run = NULL
+FROM due
+WHERE schedules.id = due.id
+RETURNING schedules.id, job_type, payload, cron_expr, timezone, priority, max_retries, next_run, active, created_at, due.due_at`, now, limit)
         if err != nil {
                 return nil, fmt.Errorf("claim due schedules: %w", err)
+        }
+        defer rows.Close()
+        out := make([]model.Schedule, 0, 4)
+        for rows.Next() {
+                var sch model.Schedule
+                if err := rows.Scan(&sch.ID, &sch.JobType, &sch.Payload, &sch.Cron, &sch.Timezone, &sch.Priority,
+                        &sch.MaxRetries, &sch.NextRun, &sch.Active, &sch.CreatedAt, &sch.DueAt); err != nil {
+                        return nil, fmt.Errorf("scan schedule: %w", err)
+                }
+                out = append(out, sch)
+        }
+        return out, rows.Err()
+}
+
+// OrphanedSchedules lists active schedules whose next_run is NULL: rows a
+// scheduler claimed for firing but never finished (crash between the claim
+// and SetScheduleNextRun). Without healing, the claim query's
+// "next_run IS NOT NULL" predicate makes them invisible forever and the
+// schedule silently dies. Healing is idempotent: concurrent healers compute
+// the same next_run from the same cron expression, so SKIP LOCKED is only an
+// optimization to avoid double work, not a correctness requirement.
+func (s *Store) OrphanedSchedules(ctx context.Context) ([]model.Schedule, error) {
+        rows, err := s.pool.Query(ctx, `
+SELECT id, job_type, payload, cron_expr, timezone, priority, max_retries, next_run, active, created_at
+FROM schedules WHERE active AND next_run IS NULL
+FOR UPDATE SKIP LOCKED`)
+        if err != nil {
+                return nil, fmt.Errorf("orphaned schedules: %w", err)
         }
         defer rows.Close()
         out := make([]model.Schedule, 0, 4)

@@ -64,10 +64,20 @@ func (s *Service) submitForWorkflow(ctx context.Context, in model.SubmitInput) (
         if err != nil {
                 return nil, err
         }
-        if !duplicate {
-                if err := s.q.Enqueue(ctx, job.ID, job.Priority); err != nil {
-                        return nil, fmt.Errorf("enqueue: %w", err)
+        if duplicate {
+                // Idempotency hit: if the node's job is still queued it may
+                // never have reached the stream (previous submit died between
+                // CreateJob and Enqueue); re-enqueue instead of stalling the
+                // node until the coordinator's 30s stale-queued sweep.
+                if job.Status == model.StatusQueued && in.RunAt == nil {
+                        if err := s.q.Enqueue(ctx, job.ID, job.Priority); err != nil {
+                                return nil, fmt.Errorf("enqueue: %w", err)
+                        }
                 }
+                return job, nil
+        }
+        if err := s.q.Enqueue(ctx, job.ID, job.Priority); err != nil {
+                return nil, fmt.Errorf("enqueue: %w", err)
         }
         return job, nil
 }
@@ -135,15 +145,17 @@ func (s *Service) GetJob(ctx context.Context, id string) (*model.Job, error) {
 }
 
 type ListOptions struct {
-        Status string
-        Type   string
-        Limit  int
-        Cursor *time.Time
+        Status   string
+        Type     string
+        Limit    int
+        Cursor   *time.Time
+        BeforeID string
 }
 
 type ListResult struct {
-        Jobs       []model.Job `json:"jobs"`
-        NextCursor *time.Time  `json:"next_cursor,omitempty"`
+        Jobs         []model.Job `json:"jobs"`
+        NextCursor   *time.Time  `json:"next_cursor,omitempty"`
+        NextBeforeID string      `json:"next_before_id,omitempty"`
 }
 
 func (s *Service) ListJobs(ctx context.Context, opts ListOptions) (*ListResult, error) {
@@ -156,18 +168,20 @@ func (s *Service) ListJobs(ctx context.Context, opts ListOptions) (*ListResult, 
                 status = &st
         }
         jobs, more, err := s.store.ListJobs(ctx, storage.ListFilter{
-                Status: status,
-                Type:   opts.Type,
-                Cursor: opts.Cursor,
-                Limit:  opts.Limit,
+                Status:   status,
+                Type:     opts.Type,
+                Cursor:   opts.Cursor,
+                BeforeID: opts.BeforeID,
+                Limit:    opts.Limit,
         })
         if err != nil {
                 return nil, err
         }
         res := &ListResult{Jobs: jobs}
         if more && len(jobs) > 0 {
-                last := jobs[len(jobs)-1].CreatedAt
-                res.NextCursor = &last
+                last := jobs[len(jobs)-1]
+                res.NextCursor = &last.CreatedAt
+                res.NextBeforeID = last.ID
         }
         return res, nil
 }
