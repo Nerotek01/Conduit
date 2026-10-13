@@ -24,12 +24,27 @@ Conduit runs on **PostgreSQL** for durable state and **Redis Streams** for dispa
 - **At-least-once execution** with idempotency keys, status CAS on every transition, and `SKIP LOCKED` claim queries — no double-claim races.
 - **Retries with exponential backoff + jitter**, permanent-error short-circuit, panic recovery (poison pills die immediately), and a dead-letter stream with reasons.
 - **Per-job execution timeout** (`timeout_ms`, 1s–24h) plus a server-wide default; timed-out jobs fail with `context deadline exceeded` and follow the normal retry path.
-- **DAG workflows**: conditional branches (`on_success` / `on_failure`), compensation handlers (`on_failure` nodes), idempotent node submission, and optimistic versioning (CAS) with automatic conflict retry.
+- **DAG workflows**: conditional branches (`on_success` / `on_failure`), compensation handlers (`on_failure` nodes), idempotent node submission, optimistic versioning (CAS) with automatic conflict retry, and failure isolation — a failed run cancels its still-queued node jobs while late-finished running nodes record their real outcome.
 - **Priority queues** (1=high … 4=bulk) as four Redis Streams read in one `XREADGROUP`.
 - **Cron scheduling** with timezone support and `next_run` rollover that prevents double-fires.
 - **Crash recovery everywhere**: heartbeat-based worker liveness, XAUTOCLAIM reaping of orphaned messages, requeue of orphaned running jobs, stale-queued re-enqueue with per-sweep leases (no re-enqueue amplification under backlog), and workflow run recovery.
 - **Real-time dashboard** over WebSocket (with polling fallback): jobs, queues, workers, workflows with a live SVG DAG view.
 - **Observability**: Prometheus `/metrics`, OpenTelemetry traces, structured slog, request IDs.
+
+## Dashboard
+
+The bundled React dashboard connects over WebSocket (with polling fallback) and shows live jobs, queue depths, worker fleet, and workflow runs with an SVG DAG view.
+
+| | |
+|---|---|
+| ![Jobs](docs/screenshots/dashboard-jobs.png) | ![Job detail](docs/screenshots/dashboard-job-detail.png) |
+| *Jobs view — live status, attempts, worker assignment* | *Job detail — payload, result, timing* |
+| ![Queues](docs/screenshots/dashboard-queues.png) | ![Workers](docs/screenshots/dashboard-workers.png) |
+| *Queues view — stream depths and status counts* | *Workers view — fleet liveness and heartbeats* |
+
+![Workflow DAG](docs/screenshots/dashboard-workflow-dag.png)
+
+*Workflows view — run history and the live SVG DAG (order-fulfillment: reserve → charge → ship/receipt → cleanup)*
 
 ## Benchmark
 
@@ -70,6 +85,13 @@ curl -X POST localhost:8080/v1/jobs \
 ```
 
 The dashboard ships inside the server binary: open http://localhost:8080/ (build it first with `make dashboard`).
+
+For a realistic multi-handler worker (email, payments, image resizing, webhooks — the types shown in the screenshots above), see [`examples/demo_worker`](examples/demo_worker/main.go):
+
+```bash
+CONDUIT_WORKER_ID=demo-worker-1 CONDUIT_HOSTNAME=node-1.prod.internal \
+  go run ./examples/demo_worker
+```
 
 ## Configuration
 
