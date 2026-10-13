@@ -1,3 +1,5 @@
+> **Note:** This system is now **public** for general use. Support is provided on a best-effort basis, but please don't expect too much — this is primarily an **experimental/test project**, not a fully production-hardened product. Use it at your own discretion, and feel free to test, report issues, or contribute.
+
 # Conduit
 
 Distributed job queue & workflow engine in Go — fault-tolerant, at-least-once delivery, real-time dashboard.
