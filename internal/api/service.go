@@ -51,7 +51,7 @@ func NewService(store *storage.Store, q *queue.RedisQueue, bus events.Bus, met *
                 maxPayloadBytes: maxPayloadBytes,
                 queuePrefix:     queuePrefix,
         }
-        svc.engine = workflow.NewEngine(store, svc.submitForWorkflow)
+        svc.engine = workflow.NewEngine(store, svc.submitForWorkflow, svc.cancelForWorkflow)
         return svc
 }
 
@@ -80,6 +80,18 @@ func (s *Service) submitForWorkflow(ctx context.Context, in model.SubmitInput) (
                 return nil, fmt.Errorf("enqueue: %w", err)
         }
         return job, nil
+}
+
+// cancelForWorkflow cancels a failed run's in-flight node jobs. It mirrors
+// Service.CancelJob (metric + live event) so the dashboard reflects workflow
+// cancellations immediately when the failure is processed server-side.
+func (s *Service) cancelForWorkflow(ctx context.Context, jobID string) (*model.Job, error) {
+        job, err := s.store.CancelJob(ctx, jobID)
+        if err == nil && job != nil && job.Status == model.StatusCancelled {
+                s.met.JobsCancelled.Inc()
+                s.bus.Publish(events.Event{Kind: events.JobCancelled, Job: job})
+        }
+        return job, err
 }
 
 type SubmitOptions struct {

@@ -47,7 +47,7 @@ type Coordinator struct {
 
 func New(store *storage.Store, q *queue.RedisQueue, redisClient *redis.Client, logger *slog.Logger, opts Options) *Coordinator {
         submitter := workflow.NewSubmitter(store, q)
-        engine := workflow.NewEngine(store, submitter.Submit)
+        engine := workflow.NewEngine(store, submitter.Submit, submitter.Cancel)
         sched := scheduler.New(store, q, opts.SchedulerInterval, logger)
         heartbeat := opts.HeartbeatInterval
         if heartbeat <= 0 {

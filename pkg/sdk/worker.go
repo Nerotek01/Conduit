@@ -2,6 +2,7 @@ package sdk
 
 import (
         "context"
+        "errors"
         "fmt"
         "os/signal"
         "syscall"
@@ -113,7 +114,7 @@ func (w *Worker) Run(ctx context.Context) error {
         defer q.Close()
 
         submitter := workflow.NewSubmitter(store, q)
-        engine := workflow.NewEngine(store, submitter.Submit)
+        engine := workflow.NewEngine(store, submitter.Submit, submitter.Cancel)
         met := metrics.New()
 
         pool, err := worker.NewPool(store, q, w.registry, events.NoopBus{}, met, logger, worker.Options{
@@ -132,6 +133,15 @@ func (w *Worker) Run(ctx context.Context) error {
         return pool.Run(ctx)
 }
 
+// RunForever runs the worker until the process receives SIGINT or SIGTERM.
+// A graceful signal shutdown returns nil rather than context.Canceled, so
+// callers can treat a non-nil error as an actual failure.
 func (w *Worker) RunForever() error {
-        return w.Run(nil)
+        ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+        defer stop()
+        err := w.Run(ctx)
+        if errors.Is(err, context.Canceled) {
+                return nil
+        }
+        return err
 }

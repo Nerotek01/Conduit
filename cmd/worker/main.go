@@ -70,7 +70,7 @@ func main() {
         bus := events.NoopBus{}
 
         submitter := workflow.NewSubmitter(store, q)
-        engine := workflow.NewEngine(store, submitter.Submit)
+        engine := workflow.NewEngine(store, submitter.Submit, submitter.Cancel)
 
         pool, err := worker.NewPool(store, q, registry, bus, met, logger, worker.Options{
                 WorkerID:       cfg.WorkerID,

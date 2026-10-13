@@ -20,6 +20,13 @@ func NewSubmitter(store *storage.Store, q *queue.RedisQueue) *StoreSubmitter {
         return &StoreSubmitter{store: store, q: q}
 }
 
+// Cancel best-effort cancels a node's backing job via storage semantics:
+// it transitions queued/scheduled/retrying jobs to cancelled and returns
+// the job with its current status plus a status-conflict error otherwise.
+func (s *StoreSubmitter) Cancel(ctx context.Context, jobID string) (*model.Job, error) {
+        return s.store.CancelJob(ctx, jobID)
+}
+
 func (s *StoreSubmitter) Submit(ctx context.Context, in model.SubmitInput) (*model.Job, error) {
         job, duplicate, err := s.store.CreateJob(ctx, in)
         if err != nil {

@@ -144,6 +144,29 @@ ORDER BY started_at DESC LIMIT $2`, workflowID, limit)
         return runs, rows.Err()
 }
 
+// RecordRunNodeStates persists a late node outcome on a run that may already
+// be terminal. Status and finished_at are immutable here (UpdateRun refuses
+// terminal runs by design); only the node map and the CAS version advance so
+// concurrent late outcomes still serialize.
+func (s *Store) RecordRunNodeStates(ctx context.Context, run *model.WorkflowRun) error {
+        body, err := json.Marshal(run.NodeStates)
+        if err != nil {
+                return fmt.Errorf("marshal node states: %w", err)
+        }
+        tag, err := s.pool.Exec(ctx, `
+UPDATE workflow_runs SET node_states = $3, version = version + 1
+WHERE id = $1 AND version = $2`,
+                run.ID, run.Version, body)
+        if err != nil {
+                return fmt.Errorf("record run node states: %w", err)
+        }
+        if tag.RowsAffected() == 0 {
+                return fmt.Errorf("%w: run %s modified concurrently", ErrStatusConflict, run.ID)
+        }
+        run.Version++
+        return nil
+}
+
 func (s *Store) ListUnfinishedRuns(ctx context.Context, limit int) ([]model.WorkflowRun, error) {
         if limit < 1 || limit > 500 {
                 limit = 100

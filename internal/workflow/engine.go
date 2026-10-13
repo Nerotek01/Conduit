@@ -14,13 +14,20 @@ import (
 
 type Submitter func(ctx context.Context, in model.SubmitInput) (*model.Job, error)
 
+// Canceler best-effort cancels a node's backing job. It mirrors storage
+// semantics: when the job can no longer be cancelled (it is running or
+// already terminal) it returns the job with its current status alongside a
+// status-conflict error.
+type Canceler func(ctx context.Context, jobID string) (*model.Job, error)
+
 type Engine struct {
-        store    *storage.Store
-        submit   Submitter
+        store  *storage.Store
+        submit Submitter
+        cancel Canceler
 }
 
-func NewEngine(store *storage.Store, submit Submitter) *Engine {
-        return &Engine{store: store, submit: submit}
+func NewEngine(store *storage.Store, submit Submitter, cancel Canceler) *Engine {
+        return &Engine{store: store, submit: submit, cancel: cancel}
 }
 
 func (e *Engine) StartRun(ctx context.Context, workflowID string) (*model.WorkflowRun, error) {
@@ -60,31 +67,42 @@ func (e *Engine) OnJobTerminal(ctx context.Context, job *model.Job) error {
                         }
                         return err
                 }
+                state, ok := run.NodeStates[*job.NodeID]
+                if !ok || state.Status.Resolved() {
+                        return nil
+                }
+                state.JobID = job.ID
+                outcome, resolved := terminalNodeState(job)
+                if !resolved {
+                        return nil
+                }
+                state.Status = outcome.status
+                state.Output = outcome.output
+                state.Error = outcome.errText
+                run.NodeStates[*job.NodeID] = state
                 if run.Status.Terminal() {
+                        // The run already finished (a sibling failed while this
+                        // job was in flight): record the late outcome so the
+                        // DAG reflects what actually happened, but do not
+                        // re-advance a terminal run.
+                        if err := e.store.RecordRunNodeStates(ctx, run); err != nil {
+                                if errors.Is(err, storage.ErrStatusConflict) {
+                                        lastErr = err
+                                        select {
+                                        case <-ctx.Done():
+                                                return ctx.Err()
+                                        case <-time.After(time.Duration(attempt+1) * 10 * time.Millisecond):
+                                        }
+                                        continue
+                                }
+                                return err
+                        }
                         return nil
                 }
                 wf, err := e.store.GetWorkflow(ctx, run.WorkflowID)
                 if err != nil {
                         return err
                 }
-                state, ok := run.NodeStates[*job.NodeID]
-                if !ok || state.Status.Resolved() {
-                        return nil
-                }
-                state.JobID = job.ID
-                switch job.Status {
-                case model.StatusSucceeded:
-                        state.Status = model.NodeSucceeded
-                        state.Output = job.Result
-                case model.StatusDead:
-                        state.Status = model.NodeFailed
-                        state.Error = deref(job.LastError)
-                case model.StatusCancelled:
-                        state.Status = model.NodeSkipped
-                default:
-                        return nil
-                }
-                run.NodeStates[*job.NodeID] = state
                 if err := e.advance(ctx, wf, run); err != nil {
                         if errors.Is(err, storage.ErrStatusConflict) {
                                 lastErr = err
@@ -100,6 +118,25 @@ func (e *Engine) OnJobTerminal(ctx context.Context, job *model.Job) error {
                 return nil
         }
         return fmt.Errorf("run %s concurrent update retries exhausted: %w", *job.RunID, lastErr)
+}
+
+// nodeOutcome is the workflow-level resolution of a job's terminal status.
+type nodeOutcome struct {
+        status  model.NodeStateStatus
+        output  json.RawMessage
+        errText string
+}
+
+func terminalNodeState(job *model.Job) (nodeOutcome, bool) {
+        switch job.Status {
+        case model.StatusSucceeded:
+                return nodeOutcome{status: model.NodeSucceeded, output: job.Result}, true
+        case model.StatusDead:
+                return nodeOutcome{status: model.NodeFailed, errText: deref(job.LastError)}, true
+        case model.StatusCancelled:
+                return nodeOutcome{status: model.NodeSkipped}, true
+        }
+        return nodeOutcome{}, false
 }
 
 func (e *Engine) RecoverRuns(ctx context.Context) (int, error) {
@@ -181,6 +218,7 @@ func (e *Engine) advance(ctx context.Context, wf *model.Workflow, run *model.Wor
         nodeMap := wf.Definition.NodeMap()
         progressed := true
         failed := false
+        submittedNow := make(map[string]bool)
         for progressed {
                 progressed = false
                 for _, node := range wf.Definition.Nodes {
@@ -217,6 +255,7 @@ func (e *Engine) advance(ctx context.Context, wf *model.Workflow, run *model.Wor
                         state.Status = model.NodeSubmitted
                         state.JobID = job.ID
                         run.NodeStates[node.ID] = state
+                        submittedNow[node.ID] = true
                         progressed = true
                 }
         }
@@ -229,6 +268,7 @@ func (e *Engine) advance(ctx context.Context, wf *model.Workflow, run *model.Wor
                 run.Status = model.RunFailed
                 now := nowUTC()
                 run.FinishedAt = &now
+                cancelInFlight(ctx, e.cancel, wf, run, submittedNow)
         } else if allResolved(wf.Definition, run.NodeStates) {
                 run.Status = model.RunSucceeded
                 now := nowUTC()
@@ -326,4 +366,54 @@ func allResolved(def model.WorkflowDefinition, states map[string]model.NodeState
                 }
         }
         return true
+}
+
+// cancelInFlight stops the in-flight node jobs of a failed run: their
+// results can no longer affect the outcome. Nodes submitted during the same
+// advance pass (failure-compensation nodes) are excluded: they exist
+// precisely because of the failure. Jobs still queued or awaiting retry are
+// cancelled outright; jobs that already reached a terminal state record
+// their real outcome; running jobs cannot be interrupted and are left
+// submitted so OnJobTerminal records their late outcome when they finish.
+// Without this, a failed run's in-flight jobs burn worker capacity for
+// nothing and the run's node states stay "submitted" forever.
+func cancelInFlight(ctx context.Context, cancel Canceler, wf *model.Workflow, run *model.WorkflowRun, submittedNow map[string]bool) {
+        for _, node := range wf.Definition.Nodes {
+                if submittedNow[node.ID] {
+                        continue
+                }
+                state := run.NodeStates[node.ID]
+                if state.Status != model.NodeSubmitted {
+                        continue
+                }
+                if cancel == nil {
+                        state.Status = model.NodeSkipped
+                        run.NodeStates[node.ID] = state
+                        continue
+                }
+                updated, err := cancel(ctx, state.JobID)
+                switch {
+                case err == nil:
+                        state.Status = model.NodeSkipped
+                case errors.Is(err, storage.ErrStatusConflict) && updated != nil:
+                        switch updated.Status {
+                        case model.StatusRunning:
+                                continue
+                        case model.StatusSucceeded:
+                                state.Status = model.NodeSucceeded
+                                state.Output = updated.Result
+                        case model.StatusDead:
+                                state.Status = model.NodeFailed
+                                state.Error = deref(updated.LastError)
+                        default:
+                                state.Status = model.NodeSkipped
+                        }
+                default:
+                        // Storage error: resolve the node anyway so the run
+                        // finishes; the backing job is cleaned up by the
+                        // coordinator's stale-queued sweep if still queued.
+                        state.Status = model.NodeSkipped
+                }
+                run.NodeStates[node.ID] = state
+        }
 }
