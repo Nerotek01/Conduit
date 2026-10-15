@@ -61,12 +61,6 @@ Measured end-to-end on the development machine (2 vCPU Intel Xeon, PostgreSQL 17
 
 The dispatch pipeline adds ~75–140 µs per job over the raw submit path (claim + execute + finalize + hook). The REST layer adds ~180–260 µs of JSON/validation/middleware overhead per request. Numbers are single-node; scale horizontally with more workers — state lives in PG/Redis, workers are stateless.
 
-Reproduce with:
-
-```bash
-make bench   # go test ./internal/loadtest/ -bench=. -benchtime=30s
-```
-
 ## Quick start
 
 ```bash
@@ -104,6 +98,7 @@ All settings are environment variables; defaults shown:
 |---|---|---|
 | `CONDUIT_HTTP_ADDR` | `:8080` | REST/WS/dashboard listener |
 | `CONDUIT_GRPC_ADDR` | `:9090` | gRPC listener |
+| `CONDUIT_METRICS_ADDR` | *(off)* | Standalone `/metrics` listener for workers (e.g. `:9101`) |
 | `CONDUIT_PG_DSN` | `postgres://conduit:conduit@localhost:5432/conduit?sslmode=disable` | PostgreSQL |
 | `CONDUIT_REDIS_ADDR` | `localhost:6379` | Redis |
 | `CONDUIT_WORKER_CONCURRENCY` | `8` | Per-worker job slots (1–512) |
@@ -117,7 +112,9 @@ All settings are environment variables; defaults shown:
 
 ## API
 
-REST (JSON) and gRPC (`conduit.v1.JobService`) expose the same operations; a Go SDK lives in `pkg/sdk`.
+REST (JSON) and gRPC (`conduit.v1.JobService`) expose the same operations; a Go SDK lives in `pkg/sdk`. gRPC `SubmitJobRequest.max_retries` is a proto3 `optional` field, so an explicit `0` (no retries) is honored; `ListJobs` supports the same `cursor`/`before_id` keyset pagination as REST (response carries `next_cursor` + `next_before_id`), and the `Job` message includes `timeout_ms` and `updated_at`.
+
+The SDK returns the engine's own types (e.g. `sdk.Job` is an alias of the internal model), which keeps the single-binary layout simple; external consumers can use the client via type inference but cannot name those types from another module.
 
 ```
 POST   /v1/jobs                     submit { type, payload, priority, max_retries,
@@ -173,6 +170,7 @@ POST /v1/workflows
 - **Idempotency**: unique partial index on `idempotency_key`; duplicate submits return the original job with `duplicate: true` (HTTP 200 vs 201).
 - **No lost updates**: every worker→PG status write is a guarded `UPDATE ... WHERE status = 'running'`; workflow runs use a `version` column with compare-and-swap plus in-engine retry.
 - **Exactly the workers you bring**: workers register via heartbeats; the coordinator marks them dead after 2× missed beats, XAUTOCLAIMs their pending messages after the visibility timeout, and requeues orphaned running jobs.
+- **Single-leader coordination**: one coordinator replica holds a Redis leader lock; scheduler ticks, reaping, and workflow recovery run only on the leader, while replicas stay warm for failover.
 - **Lease-bounded recovery**: stale-queued re-enqueue refreshes `updated_at`, so a backlogged job is re-enqueued at most once per stale window instead of every sweep.
 - **Crash-safe scheduling**: cron occurrences fire under a deterministic idempotency key (`sched:<id>:<due>`), and every scheduler tick heals schedules orphaned by a crash mid-fire - a schedule can skip at most the occurrence it was firing when it died, never stop entirely.
 - **Serial migrations**: all processes take a PostgreSQL advisory lock around auto-migration, so `docker compose up` can boot server, worker, and coordinator simultaneously without racing on `schema_migrations`.
@@ -184,7 +182,7 @@ POST /v1/workflows
 cmd/           server, worker, coordinator, cli binaries
 internal/      api (REST+gRPC+WS), worker pool, workflow engine, scheduler,
                coordinator, queue (Redis Streams), storage (pgx), retry,
-               metrics, observability, config, model, testutil, loadtest
+               metrics, observability, config, model
 pkg/sdk/       Go client + worker runtime for embedding
 pkg/api/       generated protobuf code (source of truth: api/proto)
 migrations/    embedded SQL migrations (auto-applied at startup)
@@ -195,7 +193,7 @@ deploy/        k8s manifests
 
 ## Testing
 
-Integration tests run against real PostgreSQL and Redis (no mocks):
+Integration tests run locally against real PostgreSQL and Redis (no mocks) and are kept out of the repository per release policy:
 
 ```bash
 make test    # go test -p 1 ./...      (sequential: shared test database)
