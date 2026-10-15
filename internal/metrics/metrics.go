@@ -23,6 +23,7 @@ type Metrics struct {
         ActiveWorkers  prometheus.Gauge
         InFlightJobs   prometheus.Gauge
         WSclients      prometheus.Gauge
+        EventsDropped  prometheus.Counter
 }
 
 func New() *Metrics {
@@ -80,6 +81,10 @@ func New() *Metrics {
                 WSclients: factory.NewGauge(prometheus.GaugeOpts{
                         Namespace: "conduit",
                         Name:      "websocket_clients",
+                }),
+                EventsDropped: factory.NewCounter(prometheus.CounterOpts{
+                        Namespace: "conduit",
+                        Name:      "events_dropped_total",
                 }),
         }
         return m

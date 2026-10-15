@@ -6,6 +6,7 @@ import (
         "crypto/rand"
         "encoding/hex"
         "errors"
+        "io"
         "log/slog"
         "net"
         "net/http"
@@ -88,7 +89,9 @@ func withRecover(logger *slog.Logger, next http.Handler) http.Handler {
                 defer func() {
                         if rec := recover(); rec != nil {
                                 logger.Error("handler panic", "path", r.URL.Path, "panic", rec)
-                                http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
+                                w.Header().Set("Content-Type", "application/json")
+                                w.WriteHeader(http.StatusInternalServerError)
+                                _, _ = io.WriteString(w, `{"error":"internal server error"}`)
                         }
                 }()
                 next.ServeHTTP(w, r)

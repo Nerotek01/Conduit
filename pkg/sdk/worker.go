@@ -4,6 +4,7 @@ import (
         "context"
         "errors"
         "fmt"
+        "net/http"
         "os/signal"
         "syscall"
         "time"
@@ -35,6 +36,7 @@ type WorkerConfig struct {
         JobTimeout        time.Duration
         RetryBaseDelay    time.Duration
         RetryMaxDelay     time.Duration
+        MetricsAddr       string
         LogLevel          string
 }
 
@@ -56,6 +58,7 @@ func WorkerConfigFromEnv() (WorkerConfig, error) {
                 JobTimeout:        cfg.JobTimeout,
                 RetryBaseDelay:    cfg.RetryBaseDelay,
                 RetryMaxDelay:     cfg.RetryMaxDelay,
+                MetricsAddr:       cfg.MetricsAddr,
                 LogLevel:          cfg.LogLevel,
         }, nil
 }
@@ -129,6 +132,21 @@ func (w *Worker) Run(ctx context.Context) error {
         })
         if err != nil {
                 return err
+        }
+        if w.cfg.MetricsAddr != "" {
+                mux := http.NewServeMux()
+                mux.Handle("GET /metrics", met.Handler())
+                metricsServer := &http.Server{
+                        Addr:              w.cfg.MetricsAddr,
+                        Handler:           mux,
+                        ReadHeaderTimeout: 5 * time.Second,
+                }
+                go func() {
+                        if err := metricsServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+                                logger.Error("metrics server failed", "error", err)
+                        }
+                }()
+                defer metricsServer.Close()
         }
         return pool.Run(ctx)
 }

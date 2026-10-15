@@ -11,6 +11,7 @@ import (
         "github.com/google/uuid"
 
         "github.com/Nerotek01/Conduit/internal/model"
+        "github.com/Nerotek01/Conduit/internal/scheduler"
         "github.com/Nerotek01/Conduit/internal/storage"
 )
 
@@ -49,6 +50,7 @@ func readBody(w http.ResponseWriter, r *http.Request, maxBytes int64, dst any) b
 
 func (s *Service) handleSubmitJob(w http.ResponseWriter, r *http.Request) {
         start := time.Now()
+        defer s.met.ObserveSubmission(start)
         var opts SubmitOptions
         if !readBody(w, r, s.maxPayloadBytes+4096, &opts) {
                 return
@@ -58,7 +60,6 @@ func (s *Service) handleSubmitJob(w http.ResponseWriter, r *http.Request) {
                 s.writeServiceError(w, err)
                 return
         }
-        s.met.ObserveSubmission(start)
         status := http.StatusCreated
         if duplicate {
                 status = http.StatusOK
@@ -107,6 +108,9 @@ func (s *Service) handleListJobs(w http.ResponseWriter, r *http.Request) {
                         return
                 }
                 beforeID = v
+        } else if cursor != nil {
+                writeError(w, http.StatusBadRequest, "cursor requires before_id (pass both next_cursor and next_before_id from the previous response)")
+                return
         }
         res, err := s.ListJobs(r.Context(), ListOptions{
                 Status:   q.Get("status"),
@@ -142,9 +146,11 @@ func (s *Service) handleRequeueJob(w http.ResponseWriter, r *http.Request) {
         writeJSON(w, http.StatusOK, map[string]any{"job": job})
 }
 
+const maxWorkflowBodyBytes = 2 << 20
+
 func (s *Service) handleCreateWorkflow(w http.ResponseWriter, r *http.Request) {
         var def model.WorkflowDefinition
-        if !readBody(w, r, 2<<20, &def) {
+        if !readBody(w, r, maxWorkflowBodyBytes, &def) {
                 return
         }
         wf, err := s.CreateWorkflow(r.Context(), def)
@@ -250,7 +256,7 @@ func (s *Service) handleCreateSchedule(w http.ResponseWriter, r *http.Request) {
         if !readBody(w, r, s.maxPayloadBytes+4096, &in) {
                 return
         }
-        next, err := nextScheduleRun(in.Cron, in.Timezone)
+        next, err := scheduler.NextRun(in.Cron, in.Timezone, time.Now())
         if err != nil {
                 writeError(w, http.StatusBadRequest, err.Error())
                 return

@@ -14,32 +14,13 @@ import (
 )
 
 type Scheduler struct {
-        store     *storage.Store
-        q         *queue.RedisQueue
-        interval  time.Duration
-        logger    *slog.Logger
+        store    *storage.Store
+        q        *queue.RedisQueue
+        logger   *slog.Logger
 }
 
-func New(store *storage.Store, q *queue.RedisQueue, interval time.Duration, logger *slog.Logger) *Scheduler {
-        if interval < 250*time.Millisecond {
-                interval = 250 * time.Millisecond
-        }
-        return &Scheduler{store: store, q: q, interval: interval, logger: logger}
-}
-
-func (s *Scheduler) Run(ctx context.Context) error {
-        ticker := time.NewTicker(s.interval)
-        defer ticker.Stop()
-        for {
-                select {
-                case <-ctx.Done():
-                        return ctx.Err()
-                case <-ticker.C:
-                        if err := s.Tick(ctx); err != nil {
-                                s.logger.Error("scheduler tick failed", "error", err)
-                        }
-                }
-        }
+func New(store *storage.Store, q *queue.RedisQueue, logger *slog.Logger) *Scheduler {
+        return &Scheduler{store: store, q: q, logger: logger}
 }
 
 // Tick runs one scheduling pass: promote due delayed/retrying jobs and

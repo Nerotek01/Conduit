@@ -8,8 +8,6 @@ import (
         "log/slog"
         "time"
 
-        "github.com/robfig/cron/v3"
-
         "github.com/Nerotek01/Conduit/internal/events"
         "github.com/Nerotek01/Conduit/internal/metrics"
         "github.com/Nerotek01/Conduit/internal/model"
@@ -336,22 +334,3 @@ var ErrConflict = storage.ErrStatusConflict
 
 func IsNotFound(err error) bool  { return errors.Is(err, storage.ErrNotFound) }
 func IsConflict(err error) bool  { return errors.Is(err, storage.ErrStatusConflict) }
-
-func nextScheduleRun(expr, timezone string) (time.Time, error) {
-        if expr == "" {
-                return time.Time{}, fmt.Errorf("cron expression is required")
-        }
-        loc := "UTC"
-        if timezone != "" {
-                loc = timezone
-        }
-        schedule, err := cron.ParseStandard(expr)
-        if err != nil {
-                return time.Time{}, fmt.Errorf("invalid cron expression: %w", err)
-        }
-        loaded, err := time.LoadLocation(loc)
-        if err != nil {
-                return time.Time{}, fmt.Errorf("unknown timezone %q", loc)
-        }
-        return schedule.Next(time.Now().In(loaded)).UTC(), nil
-}

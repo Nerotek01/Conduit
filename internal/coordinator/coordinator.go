@@ -3,6 +3,7 @@ package coordinator
 import (
         "context"
         "log/slog"
+        "sync/atomic"
         "time"
 
         "github.com/redis/go-redis/v9"
@@ -27,7 +28,6 @@ const (
 )
 
 type Options struct {
-        RedisClient       *redis.Client
         QueuePrefix       string
         VisibilityTimeout time.Duration
         HeartbeatInterval time.Duration
@@ -35,20 +35,22 @@ type Options struct {
 }
 
 type Coordinator struct {
-        store      *storage.Store
-        q          *queue.RedisQueue
-        engine     *workflow.Engine
-        sched      *scheduler.Scheduler
-        lock       *lock.RedisLock
-        logger     *slog.Logger
-        visibility time.Duration
-        heartbeat  time.Duration
+        store         *storage.Store
+        q             *queue.RedisQueue
+        engine        *workflow.Engine
+        sched         *scheduler.Scheduler
+        lock          *lock.RedisLock
+        logger        *slog.Logger
+        visibility    time.Duration
+        heartbeat     time.Duration
+        schedInterval time.Duration
+        leading       atomic.Bool
 }
 
 func New(store *storage.Store, q *queue.RedisQueue, redisClient *redis.Client, logger *slog.Logger, opts Options) *Coordinator {
         submitter := workflow.NewSubmitter(store, q)
         engine := workflow.NewEngine(store, submitter.Submit, submitter.Cancel)
-        sched := scheduler.New(store, q, opts.SchedulerInterval, logger)
+        sched := scheduler.New(store, q, logger)
         heartbeat := opts.HeartbeatInterval
         if heartbeat <= 0 {
                 heartbeat = 5 * time.Second
@@ -57,15 +59,20 @@ func New(store *storage.Store, q *queue.RedisQueue, redisClient *redis.Client, l
         if visibility <= 0 {
                 visibility = 60 * time.Second
         }
+        schedInterval := opts.SchedulerInterval
+        if schedInterval <= 0 {
+                schedInterval = time.Second
+        }
         return &Coordinator{
-                store:      store,
-                q:          q,
-                engine:     engine,
-                sched:      sched,
-                lock:       lock.New(redisClient, opts.QueuePrefix+":"+leaderLockKey, leaderLockTTL),
-                logger:     logger,
-                visibility: visibility,
-                heartbeat:  heartbeat,
+                store:         store,
+                q:             q,
+                engine:        engine,
+                sched:         sched,
+                lock:          lock.New(redisClient, opts.QueuePrefix+":"+leaderLockKey, leaderLockTTL),
+                logger:        logger,
+                visibility:    visibility,
+                heartbeat:     heartbeat,
+                schedInterval: schedInterval,
         }
 }
 
@@ -73,37 +80,55 @@ func (c *Coordinator) Run(ctx context.Context) error {
         if err := c.q.EnsureGroups(ctx); err != nil {
                 return err
         }
-        go c.sched.Run(ctx)
+        go c.schedLoop(ctx)
         go c.reapLoop(ctx)
         go c.recoveryLoop(ctx)
 
         ticker := time.NewTicker(leaderRefreshEvery)
         defer ticker.Stop()
-        leading := false
         for {
                 select {
                 case <-ctx.Done():
+                        c.leading.Store(false)
                         _ = c.lock.Release(ctx)
                         return ctx.Err()
                 case <-ticker.C:
                         var ok bool
                         var err error
-                        if leading {
+                        if c.leading.Load() {
                                 ok, err = c.lock.Refresh(ctx)
                         } else {
                                 ok, err = c.lock.Acquire(ctx)
                         }
                         if err != nil {
                                 c.logger.Warn("coordinator lock error, continuing in shared mode", "error", err)
-                                leading = false
+                                c.leading.Store(false)
                                 continue
                         }
-                        if ok && !leading {
-                                leading = true
+                        if ok && !c.leading.Load() {
+                                c.leading.Store(true)
                                 c.logger.Info("coordinator acquired leadership")
-                        } else if !ok && leading {
-                                leading = false
+                        } else if !ok && c.leading.Load() {
+                                c.leading.Store(false)
                                 c.logger.Warn("coordinator lost leadership")
+                        }
+                }
+        }
+}
+
+func (c *Coordinator) schedLoop(ctx context.Context) {
+        ticker := time.NewTicker(c.schedInterval)
+        defer ticker.Stop()
+        for {
+                select {
+                case <-ctx.Done():
+                        return
+                case <-ticker.C:
+                        if !c.leading.Load() {
+                                continue
+                        }
+                        if err := c.sched.Tick(ctx); err != nil {
+                                c.logger.Error("scheduler tick failed", "error", err)
                         }
                 }
         }
@@ -117,6 +142,9 @@ func (c *Coordinator) reapLoop(ctx context.Context) {
                 case <-ctx.Done():
                         return
                 case <-ticker.C:
+                        if !c.leading.Load() {
+                                continue
+                        }
                         if err := c.reap(ctx); err != nil {
                                 c.logger.Error("reap failed", "error", err)
                         }
@@ -135,10 +163,7 @@ func (c *Coordinator) recoveryLoop(ctx context.Context) {
                 case <-ctx.Done():
                         return
                 case <-ticker.C:
-                        ok, err := c.lock.Refresh(ctx)
-                        if err != nil {
-                                c.logger.Warn("lock check failed, running recovery in shared mode", "error", err)
-                        } else if !ok {
+                        if !c.leading.Load() {
                                 continue
                         }
                         if n, err := c.engine.RecoverRuns(ctx); err != nil {

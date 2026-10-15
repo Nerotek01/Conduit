@@ -5,6 +5,7 @@ import (
         "encoding/json"
         "errors"
         "fmt"
+        "net/http"
         "os"
         "os/signal"
         "syscall"
@@ -85,6 +86,23 @@ func main() {
         if err != nil {
                 logger.Error("worker pool init failed", "error", err)
                 os.Exit(1)
+        }
+
+        if cfg.MetricsAddr != "" {
+                mux := http.NewServeMux()
+                mux.Handle("GET /metrics", met.Handler())
+                metricsServer := &http.Server{
+                        Addr:              cfg.MetricsAddr,
+                        Handler:           mux,
+                        ReadHeaderTimeout: 5 * time.Second,
+                }
+                go func() {
+                        if err := metricsServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+                                logger.Error("metrics server failed", "error", err)
+                        }
+                }()
+                defer metricsServer.Close()
+                logger.Info("metrics server listening", "addr", cfg.MetricsAddr)
         }
 
         if err := pool.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {

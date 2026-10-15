@@ -46,6 +46,7 @@ type SubmitOptions struct {
         Payload        json.RawMessage
         Priority       int
         MaxRetries     int
+        MaxRetriesPtr  *int
         IdempotencyKey string
         Delay          time.Duration
         Timeout        time.Duration
@@ -111,6 +112,9 @@ func (c *Client) SubmitJob(ctx context.Context, jobType string, opts SubmitOptio
         }
         if opts.MaxRetries != 0 {
                 body["max_retries"] = opts.MaxRetries
+        }
+        if opts.MaxRetriesPtr != nil {
+                body["max_retries"] = *opts.MaxRetriesPtr
         }
         if opts.IdempotencyKey != "" {
                 body["idempotency_key"] = opts.IdempotencyKey

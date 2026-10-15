@@ -72,7 +72,7 @@ func main() {
         defer q.Close()
 
         met := metrics.New()
-        bus := events.NewChanBus(512, nil)
+        bus := events.NewChanBus(512, met.EventsDropped.Inc)
 
         svc := api.NewService(store, q, bus, met, logger, cfg.MaxPayloadBytes, cfg.QueuePrefix)
 
@@ -84,22 +84,25 @@ func main() {
         }
 
         httpServer := api.NewServer(svc, api.ServerOptions{
-                HTTPAddr:     cfg.HTTPAddr,
-                DashboardDir: cfg.DashboardDir,
-                MaxBodyBytes: cfg.MaxBodyBytes,
-                WSMaxClients: cfg.WSMaxClients,
-                Logger:       logger,
-                TraceWrap:    traceWrap,
+                HTTPAddr:        cfg.HTTPAddr,
+                DashboardDir:    cfg.DashboardDir,
+                MaxBodyBytes:    cfg.MaxBodyBytes,
+                WSMaxClients:    cfg.WSMaxClients,
+                ShutdownTimeout: cfg.ShutdownTimeout,
+                Logger:          logger,
+                TraceWrap:       traceWrap,
         }, met)
 
         grpcServer := grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler()))
         conduitv1.RegisterJobServiceServer(grpcServer, api.NewGRPCServer(svc))
 
+        errCh := make(chan error, 2)
         go func() {
                 lis, err := net.Listen("tcp", cfg.GRPCAddr)
                 if err != nil {
                         logger.Error("grpc listen failed", "error", err)
-                        os.Exit(1)
+                        errCh <- fmt.Errorf("grpc listen: %w", err)
+                        return
                 }
                 logger.Info("grpc server listening", "addr", cfg.GRPCAddr)
                 if err := grpcServer.Serve(lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
@@ -121,7 +124,6 @@ func main() {
                 return body, true
         }
 
-        errCh := make(chan error, 1)
         go func() {
                 if err := httpServer.Start(ctx, bus, snapshot); err != nil {
                         errCh <- err
@@ -132,7 +134,9 @@ func main() {
         case <-ctx.Done():
                 logger.Info("shutdown signal received")
         case err := <-errCh:
-                logger.Error("http server failed", "error", err)
+                if err != nil {
+                        logger.Error("http server failed", "error", err)
+                }
         }
 
         stopped := make(chan struct{})

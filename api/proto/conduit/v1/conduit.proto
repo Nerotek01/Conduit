@@ -22,13 +22,15 @@ message Job {
   string run_id = 15;
   string node_id = 16;
   string created_at = 17;
+  int64 timeout_ms = 18;
+  string updated_at = 19;
 }
 
 message SubmitJobRequest {
   string type = 1;
   string payload_json = 2;
   int32 priority = 3;
-  int32 max_retries = 4;
+  optional int32 max_retries = 4;
   string idempotency_key = 5;
   int64 delay_ms = 6;
   int64 timeout_ms = 7;
@@ -47,10 +49,14 @@ message ListJobsRequest {
   string status = 1;
   string type = 2;
   int32 limit = 3;
+  string cursor = 4;
+  string before_id = 5;
 }
 
 message ListJobsResponse {
   repeated Job jobs = 1;
+  string next_cursor = 2;
+  string next_before_id = 3;
 }
 
 message CancelJobRequest {

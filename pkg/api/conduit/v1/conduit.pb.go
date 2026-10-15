@@ -40,6 +40,8 @@ type Job struct {
 	RunId          string                 `protobuf:"bytes,15,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	NodeId         string                 `protobuf:"bytes,16,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
 	CreatedAt      string                 `protobuf:"bytes,17,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	TimeoutMs      int64                  `protobuf:"varint,18,opt,name=timeout_ms,json=timeoutMs,proto3" json:"timeout_ms,omitempty"`
+	UpdatedAt      string                 `protobuf:"bytes,19,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -193,12 +195,26 @@ func (x *Job) GetCreatedAt() string {
 	return ""
 }
 
+func (x *Job) GetTimeoutMs() int64 {
+	if x != nil {
+		return x.TimeoutMs
+	}
+	return 0
+}
+
+func (x *Job) GetUpdatedAt() string {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return ""
+}
+
 type SubmitJobRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Type           string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
 	PayloadJson    string                 `protobuf:"bytes,2,opt,name=payload_json,json=payloadJson,proto3" json:"payload_json,omitempty"`
 	Priority       int32                  `protobuf:"varint,3,opt,name=priority,proto3" json:"priority,omitempty"`
-	MaxRetries     int32                  `protobuf:"varint,4,opt,name=max_retries,json=maxRetries,proto3" json:"max_retries,omitempty"`
+	MaxRetries     *int32                 `protobuf:"varint,4,opt,name=max_retries,json=maxRetries,proto3,oneof" json:"max_retries,omitempty"`
 	IdempotencyKey string                 `protobuf:"bytes,5,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	DelayMs        int64                  `protobuf:"varint,6,opt,name=delay_ms,json=delayMs,proto3" json:"delay_ms,omitempty"`
 	TimeoutMs      int64                  `protobuf:"varint,7,opt,name=timeout_ms,json=timeoutMs,proto3" json:"timeout_ms,omitempty"`
@@ -258,8 +274,8 @@ func (x *SubmitJobRequest) GetPriority() int32 {
 }
 
 func (x *SubmitJobRequest) GetMaxRetries() int32 {
-	if x != nil {
-		return x.MaxRetries
+	if x != nil && x.MaxRetries != nil {
+		return *x.MaxRetries
 	}
 	return 0
 }
@@ -386,6 +402,8 @@ type ListJobsRequest struct {
 	Status        string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
 	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
 	Limit         int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
+	Cursor        string                 `protobuf:"bytes,4,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	BeforeId      string                 `protobuf:"bytes,5,opt,name=before_id,json=beforeId,proto3" json:"before_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -441,9 +459,25 @@ func (x *ListJobsRequest) GetLimit() int32 {
 	return 0
 }
 
+func (x *ListJobsRequest) GetCursor() string {
+	if x != nil {
+		return x.Cursor
+	}
+	return ""
+}
+
+func (x *ListJobsRequest) GetBeforeId() string {
+	if x != nil {
+		return x.BeforeId
+	}
+	return ""
+}
+
 type ListJobsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Jobs          []*Job                 `protobuf:"bytes,1,rep,name=jobs,proto3" json:"jobs,omitempty"`
+	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
+	NextBeforeId  string                 `protobuf:"bytes,3,opt,name=next_before_id,json=nextBeforeId,proto3" json:"next_before_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -483,6 +517,20 @@ func (x *ListJobsResponse) GetJobs() []*Job {
 		return x.Jobs
 	}
 	return nil
+}
+
+func (x *ListJobsResponse) GetNextCursor() string {
+	if x != nil {
+		return x.NextCursor
+	}
+	return ""
+}
+
+func (x *ListJobsResponse) GetNextBeforeId() string {
+	if x != nil {
+		return x.NextBeforeId
+	}
+	return ""
 }
 
 type CancelJobRequest struct {
@@ -658,7 +706,7 @@ var File_conduit_v1_conduit_proto protoreflect.FileDescriptor
 const file_conduit_v1_conduit_proto_rawDesc = "" +
 	"\n" +
 	"\x18conduit/v1/conduit.proto\x12\n" +
-	"conduit.v1\"\xf5\x03\n" +
+	"conduit.v1\"\xb3\x04\n" +
 	"\x03Job\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12!\n" +
@@ -683,28 +731,38 @@ const file_conduit_v1_conduit_proto_rawDesc = "" +
 	"\x06run_id\x18\x0f \x01(\tR\x05runId\x12\x17\n" +
 	"\anode_id\x18\x10 \x01(\tR\x06nodeId\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\x11 \x01(\tR\tcreatedAt\"\xe9\x01\n" +
+	"created_at\x18\x11 \x01(\tR\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"timeout_ms\x18\x12 \x01(\x03R\ttimeoutMs\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\x13 \x01(\tR\tupdatedAt\"\xfe\x01\n" +
 	"\x10SubmitJobRequest\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12!\n" +
 	"\fpayload_json\x18\x02 \x01(\tR\vpayloadJson\x12\x1a\n" +
-	"\bpriority\x18\x03 \x01(\x05R\bpriority\x12\x1f\n" +
-	"\vmax_retries\x18\x04 \x01(\x05R\n" +
-	"maxRetries\x12'\n" +
+	"\bpriority\x18\x03 \x01(\x05R\bpriority\x12$\n" +
+	"\vmax_retries\x18\x04 \x01(\x05H\x00R\n" +
+	"maxRetries\x88\x01\x01\x12'\n" +
 	"\x0fidempotency_key\x18\x05 \x01(\tR\x0eidempotencyKey\x12\x19\n" +
 	"\bdelay_ms\x18\x06 \x01(\x03R\adelayMs\x12\x1d\n" +
 	"\n" +
-	"timeout_ms\x18\a \x01(\x03R\ttimeoutMs\"T\n" +
+	"timeout_ms\x18\a \x01(\x03R\ttimeoutMsB\x0e\n" +
+	"\f_max_retries\"T\n" +
 	"\x11SubmitJobResponse\x12!\n" +
 	"\x03job\x18\x01 \x01(\v2\x0f.conduit.v1.JobR\x03job\x12\x1c\n" +
 	"\tduplicate\x18\x02 \x01(\bR\tduplicate\"\x1f\n" +
 	"\rGetJobRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"S\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\x88\x01\n" +
 	"\x0fListJobsRequest\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x14\n" +
-	"\x05limit\x18\x03 \x01(\x05R\x05limit\"7\n" +
+	"\x05limit\x18\x03 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06cursor\x18\x04 \x01(\tR\x06cursor\x12\x1b\n" +
+	"\tbefore_id\x18\x05 \x01(\tR\bbeforeId\"~\n" +
 	"\x10ListJobsResponse\x12#\n" +
-	"\x04jobs\x18\x01 \x03(\v2\x0f.conduit.v1.JobR\x04jobs\"\"\n" +
+	"\x04jobs\x18\x01 \x03(\v2\x0f.conduit.v1.JobR\x04jobs\x12\x1f\n" +
+	"\vnext_cursor\x18\x02 \x01(\tR\n" +
+	"nextCursor\x12$\n" +
+	"\x0enext_before_id\x18\x03 \x01(\tR\fnextBeforeId\"\"\n" +
 	"\x10CancelJobRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"#\n" +
 	"\x11RequeueJobRequest\x12\x0e\n" +
@@ -774,6 +832,7 @@ func file_conduit_v1_conduit_proto_init() {
 	if File_conduit_v1_conduit_proto != nil {
 		return
 	}
+	file_conduit_v1_conduit_proto_msgTypes[1].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

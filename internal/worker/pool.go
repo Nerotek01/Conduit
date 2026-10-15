@@ -331,7 +331,7 @@ func (p *Pool) finishSucceeded(ctx context.Context, job *model.Job, result json.
 }
 
 func (p *Pool) finishRetry(ctx context.Context, job *model.Job, cause error) {
-        policy := retry.Policy{Base: p.retryBase, Max: p.retryMax, MaxAttempts: job.MaxRetries}
+        policy := retry.Policy{Base: p.retryBase, Max: p.retryMax}
         runAt := time.Now().UTC().Add(policy.NextDelay(job.Attempts))
         finCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
         defer cancel()

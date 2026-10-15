@@ -4,7 +4,9 @@ import (
         "context"
         "errors"
         "fmt"
+        "strings"
         "time"
+        "unicode/utf8"
 
         "github.com/google/uuid"
         "github.com/jackc/pgx/v5"
@@ -136,8 +138,10 @@ type ListFilter struct {
 
 func (s *Store) ListJobs(ctx context.Context, f ListFilter) ([]model.Job, bool, error) {
         limit := f.Limit
-        if limit < 1 || limit > 200 {
+        if limit < 1 {
                 limit = 50
+        } else if limit > 200 {
+                limit = 200
         }
         args := []any{}
         q := `SELECT ` + jobColumns + ` FROM jobs WHERE 1=1`
@@ -403,7 +407,10 @@ func (s *Store) CountByStatus(ctx context.Context) (map[string]int64, error) {
                 }
                 out[status] = count
         }
-        return out, rows.Err()
+        if err := rows.Err(); err != nil {
+                return nil, fmt.Errorf("iterate counts: %w", err)
+        }
+        return out, nil
 }
 
 func collectJobs(rows pgx.Rows) ([]model.Job, error) {
@@ -423,9 +430,18 @@ func collectJobs(rows pgx.Rows) ([]model.Job, error) {
         return jobs, nil
 }
 
+const maxErrorLen = 2048
+
 func truncateErr(msg string) string {
-        if len(msg) > 2048 {
-                return msg[:2048]
+        if !utf8.ValidString(msg) {
+                msg = strings.ToValidUTF8(msg, string(utf8.RuneError))
         }
-        return msg
+        if len(msg) <= maxErrorLen {
+                return msg
+        }
+        cut := maxErrorLen
+        for cut > 0 && !utf8.RuneStart(msg[cut]) {
+                cut--
+        }
+        return msg[:cut]
 }

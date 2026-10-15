@@ -113,6 +113,8 @@ func (d *WorkflowDefinition) NodeMap() map[string]NodeSpec {
         return m
 }
 
+const MaxNodePayloadBytes = 1 << 20
+
 func (d *WorkflowDefinition) Validate() error {
         if d.Name == "" || len(d.Name) > 128 {
                 return fmt.Errorf("workflow name must be 1-128 characters")
@@ -138,7 +140,7 @@ func (d *WorkflowDefinition) Validate() error {
                 if !JobTypePattern.MatchString(n.JobType) {
                         return fmt.Errorf("node %q has invalid job type %q", n.ID, n.JobType)
                 }
-                if int64(len(n.Payload)) > 1<<20 {
+                if int64(len(n.Payload)) > MaxNodePayloadBytes {
                         return fmt.Errorf("node %q payload exceeds limit", n.ID)
                 }
                 for _, dep := range n.DependsOn {

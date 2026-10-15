@@ -10,6 +10,7 @@ import (
 type Config struct {
         HTTPAddr          string
         GRPCAddr          string
+        MetricsAddr       string
         PGDSN             string
         RedisAddr         string
         RedisPassword     string
@@ -68,6 +69,7 @@ func Load() (Config, error) {
         cfg := Config{
                 HTTPAddr:      str("CONDUIT_HTTP_ADDR", ":8080"),
                 GRPCAddr:      str("CONDUIT_GRPC_ADDR", ":9090"),
+                MetricsAddr:   str("CONDUIT_METRICS_ADDR", ""),
                 PGDSN:         str("CONDUIT_PG_DSN", "postgres://conduit:conduit@localhost:5432/conduit?sslmode=disable"),
                 RedisAddr:     str("CONDUIT_REDIS_ADDR", "localhost:6379"),
                 RedisPassword: str("CONDUIT_REDIS_PASSWORD", ""),

@@ -7,6 +7,9 @@ import (
         "fmt"
         "time"
 
+        "google.golang.org/grpc/codes"
+        "google.golang.org/grpc/status"
+
         conduitv1 "github.com/Nerotek01/Conduit/pkg/api/conduit/v1"
         "github.com/Nerotek01/Conduit/internal/model"
         "github.com/Nerotek01/Conduit/internal/storage"
@@ -30,7 +33,7 @@ func (g *GRPCServer) SubmitJob(ctx context.Context, req *conduitv1.SubmitJobRequ
                 payload = json.RawMessage(req.GetPayloadJson())
         }
         var maxRetries *int
-        if req.GetMaxRetries() > 0 {
+        if req.MaxRetries != nil {
                 mr := int(req.GetMaxRetries())
                 maxRetries = &mr
         }
@@ -63,10 +66,27 @@ func (g *GRPCServer) GetJob(ctx context.Context, req *conduitv1.GetJobRequest) (
 }
 
 func (g *GRPCServer) ListJobs(ctx context.Context, req *conduitv1.ListJobsRequest) (*conduitv1.ListJobsResponse, error) {
+        var cursor *time.Time
+        beforeID := ""
+        if c := req.GetCursor(); c != "" {
+                t, err := time.Parse(time.RFC3339Nano, c)
+                if err != nil {
+                        return nil, status.Error(codes.InvalidArgument, "invalid cursor")
+                }
+                cursor = &t
+        }
+        if b := req.GetBeforeId(); b != "" {
+                if cursor == nil {
+                        return nil, status.Error(codes.InvalidArgument, "before_id requires cursor")
+                }
+                beforeID = b
+        }
         res, err := g.svc.ListJobs(ctx, ListOptions{
-                Status: req.GetStatus(),
-                Type:   req.GetType(),
-                Limit:  int(req.GetLimit()),
+                Status:   req.GetStatus(),
+                Type:     req.GetType(),
+                Limit:    int(req.GetLimit()),
+                Cursor:   cursor,
+                BeforeID: beforeID,
         })
         if err != nil {
                 return nil, mapError(err)
@@ -75,7 +95,11 @@ func (g *GRPCServer) ListJobs(ctx context.Context, req *conduitv1.ListJobsReques
         for i := range res.Jobs {
                 jobs = append(jobs, toProtoJob(&res.Jobs[i]))
         }
-        return &conduitv1.ListJobsResponse{Jobs: jobs}, nil
+        return &conduitv1.ListJobsResponse{
+                Jobs:          jobs,
+                NextCursor:    formatTime(res.NextCursor),
+                NextBeforeId:  res.NextBeforeID,
+        }, nil
 }
 
 func (g *GRPCServer) CancelJob(ctx context.Context, req *conduitv1.CancelJobRequest) (*conduitv1.Job, error) {
@@ -120,6 +144,8 @@ func toProtoJob(job *model.Job) *conduitv1.Job {
                 RunId:          derefString(job.RunID),
                 NodeId:         derefString(job.NodeID),
                 CreatedAt:      formatTime(&job.CreatedAt),
+                TimeoutMs:      job.TimeoutMS,
+                UpdatedAt:      formatTime(&job.UpdatedAt),
         }
 }
 

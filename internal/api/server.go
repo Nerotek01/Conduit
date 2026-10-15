@@ -13,17 +13,19 @@ import (
 )
 
 type ServerOptions struct {
-        HTTPAddr     string
-        DashboardDir string
-        MaxBodyBytes int64
-        WSMaxClients int
-        Logger       *slog.Logger
-        TraceWrap    func(http.Handler) http.Handler
+        HTTPAddr        string
+        DashboardDir    string
+        MaxBodyBytes    int64
+        WSMaxClients    int
+        ShutdownTimeout time.Duration
+        Logger          *slog.Logger
+        TraceWrap       func(http.Handler) http.Handler
 }
 
 type Server struct {
-        httpServer *http.Server
-        hub        *Hub
+        httpServer       *http.Server
+        hub              *Hub
+        shutdownTimeout time.Duration
 }
 
 func NewServer(svc *Service, opts ServerOptions, met interface {
@@ -83,7 +85,8 @@ func NewServer(svc *Service, opts ServerOptions, met interface {
                         IdleTimeout:       75 * time.Second,
                         MaxHeaderBytes:    16 * 1024,
                 },
-                hub: hub,
+                hub:             hub,
+                shutdownTimeout: opts.ShutdownTimeout,
         }
 }
 
@@ -121,9 +124,15 @@ func (s *Server) Start(ctx context.Context, bus events.Bus, snapshot func() ([]b
         case err := <-errCh:
                 return err
         case <-ctx.Done():
-                shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+                timeout := s.shutdownTimeout
+                if timeout <= 0 {
+                        timeout = 10 * time.Second
+                }
+                shutdownCtx, cancel := context.WithTimeout(context.Background(), timeout)
                 defer cancel()
-                return s.httpServer.Shutdown(shutdownCtx)
+                err := s.httpServer.Shutdown(shutdownCtx)
+                s.hub.Stop()
+                return err
         }
 }
 

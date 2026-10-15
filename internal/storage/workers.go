@@ -187,13 +187,11 @@ RETURNING schedules.id, job_type, payload, cron_expr, timezone, priority, max_re
 // and SetScheduleNextRun). Without healing, the claim query's
 // "next_run IS NOT NULL" predicate makes them invisible forever and the
 // schedule silently dies. Healing is idempotent: concurrent healers compute
-// the same next_run from the same cron expression, so SKIP LOCKED is only an
-// optimization to avoid double work, not a correctness requirement.
+// the same next_run from the same cron expression.
 func (s *Store) OrphanedSchedules(ctx context.Context) ([]model.Schedule, error) {
         rows, err := s.pool.Query(ctx, `
 SELECT id, job_type, payload, cron_expr, timezone, priority, max_retries, next_run, active, created_at
-FROM schedules WHERE active AND next_run IS NULL
-FOR UPDATE SKIP LOCKED`)
+FROM schedules WHERE active AND next_run IS NULL`)
         if err != nil {
                 return nil, fmt.Errorf("orphaned schedules: %w", err)
         }

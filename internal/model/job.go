@@ -24,7 +24,7 @@ func (s JobStatus) Terminal() bool {
 }
 
 func (s JobStatus) Resolved() bool {
-        return s.Terminal() || s == StatusCancelled
+        return s.Terminal()
 }
 
 var AllStatuses = []JobStatus{StatusQueued, StatusScheduled, StatusRetrying, StatusRunning, StatusSucceeded, StatusDead, StatusCancelled}
