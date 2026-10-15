@@ -17,10 +17,13 @@ export default function QueuesView({ snapshot, tick }) {
   }, [snapshot])
 
   useEffect(() => {
-    fetchJSON('/v1/queues')
-      .then(setSnap)
-      .catch(() => {})
-  }, [tick])
+    const refresh = setInterval(() => {
+      fetchJSON('/v1/queues')
+        .then(setSnap)
+        .catch(() => {})
+    }, 5000)
+    return () => clearInterval(refresh)
+  }, [])
 
   if (!snap) {
     return <div className="panel empty-panel">loading queue snapshot...</div>

@@ -25,6 +25,7 @@ services:
   server:
     build: .
     command: ["/app/bin/server"]
+    restart: unless-stopped
     ports:
       - "8080:8080"
       - "9090:9090"
@@ -37,6 +38,7 @@ services:
   coordinator:
     build: .
     command: ["/app/bin/coordinator"]
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
@@ -46,6 +48,7 @@ services:
   worker:
     build: .
     command: ["/app/bin/worker"]
+    restart: unless-stopped
     environment:
       CONDUIT_WORKER_CONCURRENCY: "16"
     depends_on:

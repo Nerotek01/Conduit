@@ -7,6 +7,7 @@ import (
         "fmt"
         "io"
         "net/http"
+        "net/url"
         "os"
         "strings"
         "time"
@@ -54,7 +55,9 @@ func (c *client) do(method, path string, body any) (int, []byte, error) {
 
 func main() {
         base := envOr("CONDUIT_HTTP_ADDR", "http://localhost:8080")
-        if !strings.HasPrefix(base, "http") {
+        if strings.HasPrefix(base, ":") {
+                base = "http://localhost" + base
+        } else if !strings.HasPrefix(base, "http://") && !strings.HasPrefix(base, "https://") {
                 base = "http://" + base
         }
         c := newClient(base)
@@ -137,7 +140,7 @@ func cmdGet(c *client, args []string) error {
         if len(args) != 1 {
                 return fmt.Errorf("usage: get <job-id>")
         }
-        status, raw, err := c.do("GET", "/v1/jobs/"+args[0], nil)
+        status, raw, err := c.do("GET", "/v1/jobs/"+url.PathEscape(args[0]), nil)
         if err != nil {
                 return err
         }
@@ -152,14 +155,15 @@ func cmdList(c *client, args []string) error {
         if err := fs.Parse(args); err != nil {
                 return err
         }
-        path := fmt.Sprintf("/v1/jobs?limit=%d", *limit)
+        q := url.Values{}
+        q.Set("limit", fmt.Sprintf("%d", *limit))
         if *status != "" {
-                path += "&status=" + *status
+                q.Set("status", *status)
         }
         if *jobType != "" {
-                path += "&type=" + *jobType
+                q.Set("type", *jobType)
         }
-        code, raw, err := c.do("GET", path, nil)
+        code, raw, err := c.do("GET", "/v1/jobs?"+q.Encode(), nil)
         if err != nil {
                 return err
         }
@@ -170,7 +174,7 @@ func cmdCancel(c *client, args []string) error {
         if len(args) != 1 {
                 return fmt.Errorf("usage: cancel <job-id>")
         }
-        status, raw, err := c.do("DELETE", "/v1/jobs/"+args[0], nil)
+        status, raw, err := c.do("DELETE", "/v1/jobs/"+url.PathEscape(args[0]), nil)
         if err != nil {
                 return err
         }
@@ -218,7 +222,7 @@ func cmdWorkflow(c *client, args []string) error {
                 if len(args) != 2 {
                         return fmt.Errorf("usage: workflow get <workflow-id>")
                 }
-                status, raw, err := c.do("GET", "/v1/workflows/"+args[1], nil)
+                status, raw, err := c.do("GET", "/v1/workflows/"+url.PathEscape(args[1]), nil)
                 if err != nil {
                         return err
                 }
@@ -227,7 +231,7 @@ func cmdWorkflow(c *client, args []string) error {
                 if len(args) != 2 {
                         return fmt.Errorf("usage: workflow run <workflow-id>")
                 }
-                status, raw, err := c.do("POST", "/v1/workflows/"+args[1]+"/run", nil)
+                status, raw, err := c.do("POST", "/v1/workflows/"+url.PathEscape(args[1])+"/run", nil)
                 if err != nil {
                         return err
                 }
@@ -236,7 +240,7 @@ func cmdWorkflow(c *client, args []string) error {
                 if len(args) != 2 {
                         return fmt.Errorf("usage: workflow runs <workflow-id>")
                 }
-                status, raw, err := c.do("GET", "/v1/workflows/"+args[1]+"/runs", nil)
+                status, raw, err := c.do("GET", "/v1/workflows/"+url.PathEscape(args[1])+"/runs", nil)
                 if err != nil {
                         return err
                 }
@@ -286,7 +290,7 @@ func cmdSchedule(c *client, args []string) error {
                 if len(args) != 2 {
                         return fmt.Errorf("usage: schedule delete <schedule-id>")
                 }
-                status, raw, err := c.do("DELETE", "/v1/schedules/"+args[1], nil)
+                status, raw, err := c.do("DELETE", "/v1/schedules/"+url.PathEscape(args[1]), nil)
                 if err != nil {
                         return err
                 }

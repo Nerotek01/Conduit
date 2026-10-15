@@ -67,7 +67,10 @@ function computeLayout(definition) {
   const queue = nodes.filter((n) => (n.depends_on || []).length === 0).map((n) => n.id)
   for (const id of queue) level[id] = 0
   let visited = queue.length
+  const maxSteps = nodes.length * (nodes.length + 2)
+  let steps = 0
   while (queue.length > 0) {
+    if (steps++ > maxSteps) break
     const cur = queue.shift()
     for (const next of dependents[cur] || []) {
       const nextLevel = level[cur] + 1

@@ -48,7 +48,10 @@ export default function JobsView({ tick }) {
   const load = useCallback(() => {
     const path = filter ? `/v1/jobs?limit=100&status=${filter}` : '/v1/jobs?limit=100'
     fetchJSON(path)
-      .then((res) => setJobs(res.jobs || []))
+      .then((res) => {
+        setError(null)
+        setJobs(res.jobs || [])
+      })
       .catch((err) => setError(err.message))
   }, [filter])
 

@@ -7,10 +7,16 @@ export default function WorkersView({ tick }) {
   const now = Date.now()
 
   useEffect(() => {
+    const refresh = setInterval(() => {
+      fetchJSON('/v1/workers')
+        .then((res) => setWorkers(res.workers || []))
+        .catch(() => {})
+    }, 5000)
     fetchJSON('/v1/workers')
       .then((res) => setWorkers(res.workers || []))
       .catch(() => {})
-  }, [tick])
+    return () => clearInterval(refresh)
+  }, [])
 
   return (
     <div className="panel">

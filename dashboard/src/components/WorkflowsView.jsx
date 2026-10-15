@@ -25,11 +25,17 @@ export default function WorkflowsView({ tick }) {
 
   useEffect(() => {
     if (selectedWf) {
-      fetchJSON(`/v1/workflows/${selectedWf.id}/runs`)
-        .then((res) => setRuns(res.runs || []))
-        .catch(() => setRuns([]))
+      const load = () => {
+        fetchJSON(`/v1/workflows/${selectedWf.id}/runs`)
+          .then((res) => setRuns(res.runs || []))
+          .catch(() => setRuns([]))
+      }
+      load()
+      const refresh = setInterval(load, 5000)
+      return () => clearInterval(refresh)
     }
-  }, [selectedWf, tick])
+    setRuns([])
+  }, [selectedWf])
 
   const createWorkflow = () => {
     setError(null)
